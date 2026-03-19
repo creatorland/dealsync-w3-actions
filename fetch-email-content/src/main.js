@@ -76,7 +76,7 @@ export async function run() {
           body: JSON.stringify({
             userId,
             messageIds,
-            syncStateId: `w3-workflow-${Date.now()}`,
+            syncStateId: rows[0]?.USER_REPORT_ID || rows[0]?.SYNC_STATE_ID || '',
           }),
         },
       )
