@@ -25,5 +25,5 @@ export default [
   entry('dispatch-batches/src/index.js', 'dispatch-batches/dist/index.js'),
   entry('save-detection-results/src/index.js', 'save-detection-results/dist/index.js'),
   entry('build-ai-prompt/src/index.js', 'build-ai-prompt/dist/index.js'),
-  entry('sxt-query/src/index.js', 'sxt-query/dist/index.js', ['sxt-nodejs-sdk']),
+  // sxt-query is NOT bundled by Rollup (WASM dependency). Built separately.
 ]

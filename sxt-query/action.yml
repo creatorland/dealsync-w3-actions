@@ -29,4 +29,4 @@ outputs:
     description: 'Query response JSON'
 runs:
   using: node24
-  main: dist/index.js
+  main: src/index.js
