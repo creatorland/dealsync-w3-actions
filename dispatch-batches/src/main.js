@@ -219,9 +219,19 @@ export async function run() {
       await sleep(100)
     }
 
-    core.setOutput('success', 'true')
+    const totalClaimed = filterBatches.length + detectBatches.length
+    const totalDispatched = dispatchedFilter + dispatchedDetect
+    const hasFailures = totalDispatched < totalClaimed
+
     core.setOutput('dispatched_filter_count', String(dispatchedFilter))
     core.setOutput('dispatched_detect_count', String(dispatchedDetect))
+
+    if (hasFailures) {
+      core.setOutput('success', 'false')
+      core.setFailed(`${totalClaimed - totalDispatched} of ${totalClaimed} triggers failed`)
+    } else {
+      core.setOutput('success', 'true')
+    }
   } catch (error) {
     core.setOutput('success', 'false')
     core.setOutput('dispatched_filter_count', '0')
