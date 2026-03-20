@@ -1,0 +1,64 @@
+name: 'Dealsync'
+description: 'Email filtering, deal classification, and batch dispatch for the Dealsync pipeline'
+author: 'creatorland'
+
+inputs:
+  command:
+    description: 'Operation: filter, build-prompt, classify, dispatch'
+    required: true
+  encrypt:
+    description: 'Enable encryption on sensitive outputs (true/false)'
+    default: 'true'
+  encryption-key:
+    description: 'AES-256-GCM key'
+  auth-url:
+    description: 'SxT auth proxy URL (classify, dispatch)'
+  auth-secret:
+    description: 'SxT auth shared secret (classify, dispatch)'
+  api-url:
+    description: 'SxT API base URL (classify, dispatch)'
+  biscuit:
+    description: 'Pre-generated SxT biscuit (classify, dispatch)'
+  schema:
+    description: 'SxT schema name (classify, dispatch)'
+  w3-rpc-url:
+    description: 'W3 node URL for triggering processors (dispatch)'
+  processor-name:
+    description: 'Processor workflow name to trigger (dispatch)'
+    default: 'Dealsync Processor'
+  active-filter:
+    description: 'Current active filter count (dispatch)'
+  active-detect:
+    description: 'Current active detect count (dispatch)'
+  pending-filter:
+    description: 'Pending filter count (dispatch)'
+  pending-detect:
+    description: 'Pending detect count (dispatch)'
+  max-filter:
+    description: 'Max filter concurrency (dispatch)'
+    default: '600'
+  max-detect:
+    description: 'Max detect concurrency (dispatch)'
+    default: '300'
+  filter-batch-size:
+    description: 'Emails per filter batch (dispatch)'
+    default: '200'
+  detect-batch-size:
+    description: 'Emails per detect batch (dispatch)'
+    default: '50'
+  emails:
+    description: 'JSON array of email content (filter, build-prompt)'
+  ai-response:
+    description: 'AI classification JSON (classify)'
+  metadata:
+    description: 'JSON deal_states metadata (classify)'
+
+outputs:
+  success:
+    description: 'Whether operation succeeded'
+  result:
+    description: 'JSON result of the operation'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
