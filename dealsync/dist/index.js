@@ -27702,10 +27702,11 @@ const dispatch = {
     )`,
 
   /** Atomically claim pending_classification deal_states into classifying (sync-level + thread-level guard) */
+  /** Claim by thread — batchSize = max threads, claims ALL emails in those threads */
   claimClassifyBatch: (schema, batchId, batchSize) =>
     `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.CLASSIFYING}', BATCH_ID = '${batchId}'
-    WHERE EMAIL_METADATA_ID IN (
-      SELECT ds.EMAIL_METADATA_ID FROM ${schema}.DEAL_STATES ds
+    WHERE THREAD_ID IN (
+      SELECT DISTINCT ds.THREAD_ID FROM ${schema}.DEAL_STATES ds
       WHERE ds.STATUS = '${STATUS.PENDING_CLASSIFICATION}'
         AND NOT EXISTS (
           SELECT 1 FROM ${schema}.DEAL_STATES ds2
@@ -27713,7 +27714,7 @@ const dispatch = {
             AND ds2.STATUS IN ('${STATUS.PENDING}', '${STATUS.FILTERING}')
         )
       LIMIT ${batchSize}
-    )`,
+    ) AND STATUS = '${STATUS.PENDING_CLASSIFICATION}'`,
 
   /** Count deal_states claimed by a trigger hash (verify claim) */
   countClaimed: (schema, batchId) =>
