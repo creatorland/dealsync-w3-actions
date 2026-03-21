@@ -7,6 +7,7 @@ import { runExtractMetadata } from './extract-metadata.js'
 import { runSxtQuery } from './sxt-query.js'
 import { runFetchContent } from './fetch-content.js'
 import { runWorkflowTriggers } from './workflow-triggers.js'
+import { runFetchAndFilter } from './fetch-and-filter.js'
 
 const COMMANDS = {
   filter: runFilter,
@@ -18,6 +19,7 @@ const COMMANDS = {
   'sxt-execute': runSxtQuery,
   'fetch-content': runFetchContent,
   'workflow-triggers': runWorkflowTriggers,
+  'fetch-and-filter': runFetchAndFilter,
 }
 
 export async function run() {
