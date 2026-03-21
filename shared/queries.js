@@ -39,15 +39,23 @@ export const orchestrator = {
       (SELECT COUNT(*) FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.PENDING}') AS PENDING_FILTER,
       (SELECT COUNT(*) FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.PENDING_CLASSIFICATION}') AS PENDING_CLASSIFY`,
 
-  /** Find stuck batches that can be retried (retrigger count < maxRetriggers) */
-  findStuckBatches: (schema, minutes = 10, maxRetriggers = 3) =>
+  /** Find stuck batches that can be retried.
+   *  - Batch must be stuck > staleMinutes
+   *  - Retrigger count < maxRetriggers (dead letter if exceeded)
+   *  - Last event must be > cooldownMinutes ago (prevents spam retriggers) */
+  findStuckBatches: (schema, staleMinutes = 10, maxRetriggers = 3, cooldownMinutes = 5) =>
     `SELECT ds.BATCH_ID,
       CASE WHEN ds.STATUS = '${STATUS.FILTERING}' THEN 'filter' ELSE 'classify' END AS BATCH_TYPE
     FROM ${schema}.DEAL_STATES ds
     LEFT JOIN ${schema}.BATCH_EVENTS be ON be.BATCH_ID = ds.BATCH_ID AND be.EVENT_TYPE = 'retrigger'
     WHERE ds.STATUS IN ('${STATUS.FILTERING}', '${STATUS.CLASSIFYING}')
     AND ds.BATCH_ID IS NOT NULL
-    AND ds.UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${minutes}' MINUTE
+    AND ds.UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${staleMinutes}' MINUTE
+    AND NOT EXISTS (
+      SELECT 1 FROM ${schema}.BATCH_EVENTS recent
+      WHERE recent.BATCH_ID = ds.BATCH_ID
+      AND recent.CREATED_AT > CURRENT_TIMESTAMP - INTERVAL '${cooldownMinutes}' MINUTE
+    )
     GROUP BY ds.BATCH_ID, ds.STATUS
     HAVING COUNT(be.TRIGGER_HASH) < ${maxRetriggers}`,
 }
