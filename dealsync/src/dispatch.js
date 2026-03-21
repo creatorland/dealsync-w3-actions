@@ -1,3 +1,4 @@
+import * as crypto from 'crypto'
 import * as core from '@actions/core'
 import { dispatch, STATUS, sanitizeSchema } from '../../shared/queries.js'
 import { authenticate, executeSql } from './sxt-client.js'
@@ -10,6 +11,28 @@ function parseNonNegativeInt(value, name) {
   const n = parseInt(value, 10)
   if (isNaN(n) || n < 0) throw new Error(`${name} must be non-negative integer, got: ${value}`)
   return n
+}
+
+function generateBatchId() {
+  // UUIDv7: timestamp-based, sortable
+  const now = Date.now()
+  const bytes = new Uint8Array(16)
+  // Timestamp (48 bits)
+  bytes[0] = (now / 2 ** 40) & 0xff
+  bytes[1] = (now / 2 ** 32) & 0xff
+  bytes[2] = (now / 2 ** 24) & 0xff
+  bytes[3] = (now / 2 ** 16) & 0xff
+  bytes[4] = (now / 2 ** 8) & 0xff
+  bytes[5] = now & 0xff
+  // Version 7 + random
+  const rand = crypto.randomBytes(10)
+  bytes[6] = 0x70 | (rand[0] & 0x0f)
+  bytes[7] = rand[1]
+  bytes[8] = 0x80 | (rand[2] & 0x3f)
+  for (let i = 9; i < 16; i++) bytes[i] = rand[i - 6]
+  // Format as UUID
+  const hex = Buffer.from(bytes).toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 export async function runDispatch() {
@@ -49,100 +72,93 @@ export async function runDispatch() {
   let dispatchedFilter = 0
   let dispatchedDetect = 0
 
-  // Dispatch filter batches
+  // Dispatch filter batches: claim first, then trigger
   while (filterSlots > 0 && pendingFilter > 0) {
-    // 1. Trigger processor to get a trigger hash
-    let triggerHash
+    const batchId = generateBatchId()
+
+    // 1. Claim batch with generated batch ID
+    await executeSql(
+      apiUrl,
+      jwt,
+      biscuit,
+      dispatch.claimFilterBatch(schema, batchId, filterBatchSize),
+    )
+
+    const rows = await executeSql(apiUrl, jwt, biscuit, dispatch.countClaimed(schema, batchId))
+    const claimed = rows[0]?.CNT ?? 0
+
+    if (claimed === 0) break
+
+    // 2. Trigger processor with batch ID so it knows which rows to process
     try {
       const triggerUrl = `${w3RpcUrl}/workflow/${encodeURIComponent(processorName)}/trigger`
       const resp = await fetch(triggerUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          inputs: { batch_type: 'filter' },
+          inputs: { batch_type: 'filter', batch_id: batchId },
         }),
       })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
-      const result = await resp.json()
-      triggerHash = result.triggerHash
+      dispatchedFilter++
+      core.info(`Filter batch: batchId=${batchId}, claimed=${claimed}`)
     } catch (err) {
-      core.error(`Filter trigger failed: ${err.message}`)
-      break
-    }
-
-    // 2. Claim batch using trigger hash
-    await executeSql(
-      apiUrl,
-      jwt,
-      biscuit,
-      dispatch.claimFilterBatch(schema, triggerHash, filterBatchSize),
-    )
-
-    const rows = await executeSql(apiUrl, jwt, biscuit, dispatch.countClaimed(schema, triggerHash))
-    const claimed = rows[0]?.CNT ?? 0
-
-    if (claimed === 0) {
-      // Nothing claimed — reset and stop
+      core.error(`Filter trigger failed for ${batchId}: ${err.message}`)
       await executeSql(
         apiUrl,
         jwt,
         biscuit,
-        dispatch.resetClaimed(schema, triggerHash, STATUS.PENDING),
+        dispatch.resetClaimed(schema, batchId, STATUS.PENDING),
       )
       break
     }
 
     filterSlots -= claimed
-    dispatchedFilter++
-    core.info(`Filter batch: triggerHash=${triggerHash}, claimed=${claimed}`)
     await sleep(100)
   }
 
-  // Dispatch detection batches
+  // Dispatch detection batches: claim first, then trigger
   while (detectSlots > 0 && pendingDetect > 0) {
-    // 1. Trigger processor to get a trigger hash
-    let triggerHash
+    const batchId = generateBatchId()
+
+    // 1. Claim batch
+    await executeSql(
+      apiUrl,
+      jwt,
+      biscuit,
+      dispatch.claimDetectBatch(schema, batchId, detectBatchSize),
+    )
+
+    const rows = await executeSql(apiUrl, jwt, biscuit, dispatch.countClaimed(schema, batchId))
+    const claimed = rows[0]?.CNT ?? 0
+
+    if (claimed === 0) break
+
+    // 2. Trigger processor
     try {
       const triggerUrl = `${w3RpcUrl}/workflow/${encodeURIComponent(processorName)}/trigger`
       const resp = await fetch(triggerUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          inputs: { batch_type: 'detection' },
+          inputs: { batch_type: 'detection', batch_id: batchId },
         }),
       })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
-      const result = await resp.json()
-      triggerHash = result.triggerHash
+      dispatchedDetect++
+      core.info(`Detect batch: batchId=${batchId}, claimed=${claimed}`)
     } catch (err) {
-      core.error(`Detect trigger failed: ${err.message}`)
-      break
-    }
-
-    // 2. Claim batch using trigger hash
-    await executeSql(
-      apiUrl,
-      jwt,
-      biscuit,
-      dispatch.claimDetectBatch(schema, triggerHash, detectBatchSize),
-    )
-
-    const rows = await executeSql(apiUrl, jwt, biscuit, dispatch.countClaimed(schema, triggerHash))
-    const claimed = rows[0]?.CNT ?? 0
-
-    if (claimed === 0) {
+      core.error(`Detect trigger failed for ${batchId}: ${err.message}`)
       await executeSql(
         apiUrl,
         jwt,
         biscuit,
-        dispatch.resetClaimed(schema, triggerHash, STATUS.PENDING_CLASSIFICATION),
+        dispatch.resetClaimed(schema, batchId, STATUS.PENDING_CLASSIFICATION),
       )
       break
     }
 
     detectSlots -= claimed
-    dispatchedDetect++
-    core.info(`Detect batch: triggerHash=${triggerHash}, claimed=${claimed}`)
     await sleep(100)
   }
 

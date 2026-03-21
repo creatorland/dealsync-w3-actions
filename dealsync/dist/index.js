@@ -27695,15 +27695,15 @@ const STATUS = {
 
 const dispatch = {
   /** Atomically claim pending deal_states into filtering with a trigger hash */
-  claimFilterBatch: (schema, triggerHash, batchSize) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.FILTERING}', ACTIVE_TRIGGER_HASH = '${triggerHash}'
+  claimFilterBatch: (schema, batchId, batchSize) =>
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.FILTERING}', BATCH_ID = '${batchId}'
     WHERE EMAIL_METADATA_ID IN (
       SELECT EMAIL_METADATA_ID FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.PENDING}' LIMIT ${batchSize}
     )`,
 
   /** Atomically claim pending_classification deal_states into classifying (with thread-completeness check) */
-  claimDetectBatch: (schema, triggerHash, batchSize) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.CLASSIFYING}', ACTIVE_TRIGGER_HASH = '${triggerHash}'
+  claimDetectBatch: (schema, batchId, batchSize) =>
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.CLASSIFYING}', BATCH_ID = '${batchId}'
     WHERE EMAIL_METADATA_ID IN (
       SELECT ds.EMAIL_METADATA_ID FROM ${schema}.DEAL_STATES ds
       WHERE ds.STATUS = '${STATUS.PENDING_CLASSIFICATION}'
@@ -27717,12 +27717,12 @@ const dispatch = {
     )`,
 
   /** Count deal_states claimed by a trigger hash (verify claim) */
-  countClaimed: (schema, triggerHash) =>
-    `SELECT COUNT(*) AS CNT FROM ${schema}.DEAL_STATES WHERE ACTIVE_TRIGGER_HASH = '${triggerHash}'`,
+  countClaimed: (schema, batchId) =>
+    `SELECT COUNT(*) AS CNT FROM ${schema}.DEAL_STATES WHERE BATCH_ID = '${batchId}'`,
 
   /** Reset claimed deal_states back to original status on trigger failure */
-  resetClaimed: (schema, triggerHash, resetStatus) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${resetStatus}', ACTIVE_TRIGGER_HASH = NULL WHERE ACTIVE_TRIGGER_HASH = '${triggerHash}'`,
+  resetClaimed: (schema, batchId, resetStatus) =>
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${resetStatus}', BATCH_ID = NULL WHERE BATCH_ID = '${batchId}'`,
 };
 
 // ============================================================
@@ -27731,7 +27731,7 @@ const dispatch = {
 
 const detection = {
   /** Fetch deal_states + AI context for detection */
-  fetchBatchWithContext: (schema, triggerHash) =>
+  fetchBatchWithContext: (schema, batchId) =>
     `SELECT ds.EMAIL_METADATA_ID, ds.MESSAGE_ID, ds.USER_ID, ds.THREAD_ID, ds.SYNC_STATE_ID,
       latest_eval.AI_SUMMARY AS PREVIOUS_AI_SUMMARY,
       d.ID AS EXISTING_DEAL_ID
@@ -27742,15 +27742,15 @@ const detection = {
       FROM ${schema}.EMAIL_THREAD_EVALUATIONS
     ) latest_eval ON latest_eval.THREAD_ID = ds.THREAD_ID AND latest_eval.RN = 1
     LEFT JOIN ${schema}.DEALS d ON d.THREAD_ID = ds.THREAD_ID AND d.USER_ID = ds.USER_ID
-    WHERE ds.ACTIVE_TRIGGER_HASH = '${triggerHash}'`,
+    WHERE ds.BATCH_ID = '${batchId}'`,
 
   /** Move deal deal_states to deal status */
   updateDeals: (schema, sqlQuotedIds) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.DEAL}', ACTIVE_TRIGGER_HASH = NULL WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.DEAL}', BATCH_ID = NULL WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
 
   /** Move non-deal deal_states to not_deal status */
   updateNotDeal: (schema, sqlQuotedIds) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.NOT_DEAL}', ACTIVE_TRIGGER_HASH = NULL WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.NOT_DEAL}', BATCH_ID = NULL WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
 };
 
 // ============================================================
@@ -27815,8 +27815,8 @@ const saveResults = {
 
 const workflowTriggers = {
   /** Fetch current workflow_triggers for all deal_states claimed by a trigger hash */
-  fetchByTriggerHash: (schema, triggerHash) =>
-    `SELECT EMAIL_METADATA_ID, WORKFLOW_TRIGGERS FROM ${schema}.DEAL_STATES WHERE ACTIVE_TRIGGER_HASH = '${triggerHash}'`,
+  fetchByBatchId: (schema, batchId) =>
+    `SELECT EMAIL_METADATA_ID, WORKFLOW_TRIGGERS FROM ${schema}.DEAL_STATES WHERE BATCH_ID = '${batchId}'`,
 
   /** Update workflow_triggers for a single deal_state */
   update: (schema, emailMetadataId, serializedJson) =>
@@ -28089,6 +28089,28 @@ function parseNonNegativeInt(value, name) {
   return n
 }
 
+function generateBatchId() {
+  // UUIDv7: timestamp-based, sortable
+  const now = Date.now();
+  const bytes = new Uint8Array(16);
+  // Timestamp (48 bits)
+  bytes[0] = (now / 2 ** 40) & 0xff;
+  bytes[1] = (now / 2 ** 32) & 0xff;
+  bytes[2] = (now / 2 ** 24) & 0xff;
+  bytes[3] = (now / 2 ** 16) & 0xff;
+  bytes[4] = (now / 2 ** 8) & 0xff;
+  bytes[5] = now & 0xff;
+  // Version 7 + random
+  const rand = crypto.randomBytes(10);
+  bytes[6] = 0x70 | (rand[0] & 0x0f);
+  bytes[7] = rand[1];
+  bytes[8] = 0x80 | (rand[2] & 0x3f);
+  for (let i = 9; i < 16; i++) bytes[i] = rand[i - 6];
+  // Format as UUID
+  const hex = Buffer.from(bytes).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 async function runDispatch() {
   const authUrl = coreExports.getInput('auth-url');
   const authSecret = coreExports.getInput('auth-secret');
@@ -28126,100 +28148,93 @@ async function runDispatch() {
   let dispatchedFilter = 0;
   let dispatchedDetect = 0;
 
-  // Dispatch filter batches
+  // Dispatch filter batches: claim first, then trigger
   while (filterSlots > 0 && pendingFilter > 0) {
-    // 1. Trigger processor to get a trigger hash
-    let triggerHash;
+    const batchId = generateBatchId();
+
+    // 1. Claim batch with generated batch ID
+    await executeSql(
+      apiUrl,
+      jwt,
+      biscuit,
+      dispatch.claimFilterBatch(schema, batchId, filterBatchSize),
+    );
+
+    const rows = await executeSql(apiUrl, jwt, biscuit, dispatch.countClaimed(schema, batchId));
+    const claimed = rows[0]?.CNT ?? 0;
+
+    if (claimed === 0) break
+
+    // 2. Trigger processor with batch ID so it knows which rows to process
     try {
       const triggerUrl = `${w3RpcUrl}/workflow/${encodeURIComponent(processorName)}/trigger`;
       const resp = await fetch(triggerUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          inputs: { batch_type: 'filter' },
+          inputs: { batch_type: 'filter', batch_id: batchId },
         }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
-      const result = await resp.json();
-      triggerHash = result.triggerHash;
+      dispatchedFilter++;
+      coreExports.info(`Filter batch: batchId=${batchId}, claimed=${claimed}`);
     } catch (err) {
-      coreExports.error(`Filter trigger failed: ${err.message}`);
-      break
-    }
-
-    // 2. Claim batch using trigger hash
-    await executeSql(
-      apiUrl,
-      jwt,
-      biscuit,
-      dispatch.claimFilterBatch(schema, triggerHash, filterBatchSize),
-    );
-
-    const rows = await executeSql(apiUrl, jwt, biscuit, dispatch.countClaimed(schema, triggerHash));
-    const claimed = rows[0]?.CNT ?? 0;
-
-    if (claimed === 0) {
-      // Nothing claimed — reset and stop
+      coreExports.error(`Filter trigger failed for ${batchId}: ${err.message}`);
       await executeSql(
         apiUrl,
         jwt,
         biscuit,
-        dispatch.resetClaimed(schema, triggerHash, STATUS.PENDING),
+        dispatch.resetClaimed(schema, batchId, STATUS.PENDING),
       );
       break
     }
 
     filterSlots -= claimed;
-    dispatchedFilter++;
-    coreExports.info(`Filter batch: triggerHash=${triggerHash}, claimed=${claimed}`);
     await sleep(100);
   }
 
-  // Dispatch detection batches
+  // Dispatch detection batches: claim first, then trigger
   while (detectSlots > 0 && pendingDetect > 0) {
-    // 1. Trigger processor to get a trigger hash
-    let triggerHash;
+    const batchId = generateBatchId();
+
+    // 1. Claim batch
+    await executeSql(
+      apiUrl,
+      jwt,
+      biscuit,
+      dispatch.claimDetectBatch(schema, batchId, detectBatchSize),
+    );
+
+    const rows = await executeSql(apiUrl, jwt, biscuit, dispatch.countClaimed(schema, batchId));
+    const claimed = rows[0]?.CNT ?? 0;
+
+    if (claimed === 0) break
+
+    // 2. Trigger processor
     try {
       const triggerUrl = `${w3RpcUrl}/workflow/${encodeURIComponent(processorName)}/trigger`;
       const resp = await fetch(triggerUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          inputs: { batch_type: 'detection' },
+          inputs: { batch_type: 'detection', batch_id: batchId },
         }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
-      const result = await resp.json();
-      triggerHash = result.triggerHash;
+      dispatchedDetect++;
+      coreExports.info(`Detect batch: batchId=${batchId}, claimed=${claimed}`);
     } catch (err) {
-      coreExports.error(`Detect trigger failed: ${err.message}`);
-      break
-    }
-
-    // 2. Claim batch using trigger hash
-    await executeSql(
-      apiUrl,
-      jwt,
-      biscuit,
-      dispatch.claimDetectBatch(schema, triggerHash, detectBatchSize),
-    );
-
-    const rows = await executeSql(apiUrl, jwt, biscuit, dispatch.countClaimed(schema, triggerHash));
-    const claimed = rows[0]?.CNT ?? 0;
-
-    if (claimed === 0) {
+      coreExports.error(`Detect trigger failed for ${batchId}: ${err.message}`);
       await executeSql(
         apiUrl,
         jwt,
         biscuit,
-        dispatch.resetClaimed(schema, triggerHash, STATUS.PENDING_CLASSIFICATION),
+        dispatch.resetClaimed(schema, batchId, STATUS.PENDING_CLASSIFICATION),
       );
       break
     }
 
     detectSlots -= claimed;
-    dispatchedDetect++;
-    coreExports.info(`Detect batch: triggerHash=${triggerHash}, claimed=${claimed}`);
     await sleep(100);
   }
 
@@ -28376,11 +28391,11 @@ async function runFetchContent() {
 }
 
 /**
- * Append or update workflow_triggers trail on deal_states claimed by a trigger hash.
+ * Append or update workflow_triggers trail on deal_states claimed by a batch ID.
  *
  * Actions:
  *   - "start": Append a new entry with success=false (called at processor start)
- *   - "complete": Update the last entry matching this trigger_hash to success=true
+ *   - "complete": Update the last entry matching this batch_id to success=true
  */
 async function runWorkflowTriggers() {
   const authUrl = coreExports.getInput('auth-url');
@@ -28390,11 +28405,10 @@ async function runWorkflowTriggers() {
   const schema = sanitizeSchema(coreExports.getInput('schema'));
 
   const action = coreExports.getInput('trigger-action'); // 'start' or 'complete'
-  const triggerHash = coreExports.getInput('trigger-hash');
-  const parentTriggerHash = coreExports.getInput('parent-trigger-hash') || '';
+  const batchId = coreExports.getInput('batch-id');
   const triggerType = coreExports.getInput('trigger-type') || 'filter'; // 'filter' or 'detection'
 
-  if (!triggerHash) throw new Error('trigger-hash is required')
+  if (!batchId) throw new Error('batch-id is required')
   if (!['start', 'complete'].includes(action)) {
     throw new Error(`trigger-action must be "start" or "complete", got: ${action}`)
   }
@@ -28406,7 +28420,7 @@ async function runWorkflowTriggers() {
     apiUrl,
     jwt,
     biscuit,
-    workflowTriggers.fetchByTriggerHash(schema, triggerHash),
+    workflowTriggers.fetchByBatchId(schema, batchId),
   );
 
   let updated = 0;
@@ -28422,15 +28436,14 @@ async function runWorkflowTriggers() {
     if (action === 'start') {
       triggers.push({
         type: triggerType,
-        trigger_hash: triggerHash,
-        parent_trigger_hash: parentTriggerHash,
+        batch_id: batchId,
         timestamp: new Date().toISOString(),
         success: false,
       });
     } else {
-      // complete: find last entry with this trigger_hash and set success=true
+      // complete: find last entry with this batch_id and set success=true
       for (let i = triggers.length - 1; i >= 0; i--) {
-        if (triggers[i].trigger_hash === triggerHash) {
+        if (triggers[i].batch_id === batchId) {
           triggers[i].success = true;
           break
         }

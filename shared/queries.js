@@ -48,7 +48,7 @@ export const orchestrator = {
         ELSE STATUS
       END,
       ATTEMPTS = ATTEMPTS + 1,
-      ACTIVE_TRIGGER_HASH = NULL
+      BATCH_ID = NULL
     WHERE STATUS IN ('${STATUS.FILTERING}', '${STATUS.CLASSIFYING}')
     AND UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${minutes}' MINUTE`,
 }
@@ -59,15 +59,15 @@ export const orchestrator = {
 
 export const dispatch = {
   /** Atomically claim pending deal_states into filtering with a trigger hash */
-  claimFilterBatch: (schema, triggerHash, batchSize) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.FILTERING}', ACTIVE_TRIGGER_HASH = '${triggerHash}'
+  claimFilterBatch: (schema, batchId, batchSize) =>
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.FILTERING}', BATCH_ID = '${batchId}'
     WHERE EMAIL_METADATA_ID IN (
       SELECT EMAIL_METADATA_ID FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.PENDING}' LIMIT ${batchSize}
     )`,
 
   /** Atomically claim pending_classification deal_states into classifying (with thread-completeness check) */
-  claimDetectBatch: (schema, triggerHash, batchSize) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.CLASSIFYING}', ACTIVE_TRIGGER_HASH = '${triggerHash}'
+  claimDetectBatch: (schema, batchId, batchSize) =>
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.CLASSIFYING}', BATCH_ID = '${batchId}'
     WHERE EMAIL_METADATA_ID IN (
       SELECT ds.EMAIL_METADATA_ID FROM ${schema}.DEAL_STATES ds
       WHERE ds.STATUS = '${STATUS.PENDING_CLASSIFICATION}'
@@ -81,12 +81,12 @@ export const dispatch = {
     )`,
 
   /** Count deal_states claimed by a trigger hash (verify claim) */
-  countClaimed: (schema, triggerHash) =>
-    `SELECT COUNT(*) AS CNT FROM ${schema}.DEAL_STATES WHERE ACTIVE_TRIGGER_HASH = '${triggerHash}'`,
+  countClaimed: (schema, batchId) =>
+    `SELECT COUNT(*) AS CNT FROM ${schema}.DEAL_STATES WHERE BATCH_ID = '${batchId}'`,
 
   /** Reset claimed deal_states back to original status on trigger failure */
-  resetClaimed: (schema, triggerHash, resetStatus) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${resetStatus}', ACTIVE_TRIGGER_HASH = NULL WHERE ACTIVE_TRIGGER_HASH = '${triggerHash}'`,
+  resetClaimed: (schema, batchId, resetStatus) =>
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${resetStatus}', BATCH_ID = NULL WHERE BATCH_ID = '${batchId}'`,
 }
 
 // ============================================================
@@ -95,18 +95,18 @@ export const dispatch = {
 
 export const filter = {
   /** Fetch deal_states claimed by a trigger hash for filtering */
-  fetchBatch: (schema, triggerHash) =>
+  fetchBatch: (schema, batchId) =>
     `SELECT EMAIL_METADATA_ID, MESSAGE_ID, USER_ID, SYNC_STATE_ID, THREAD_ID
     FROM ${schema}.DEAL_STATES
-    WHERE ACTIVE_TRIGGER_HASH = '${triggerHash}'`,
+    WHERE BATCH_ID = '${batchId}'`,
 
   /** Move filtered deal_states to pending_classification */
   updateFiltered: (schema, sqlQuotedIds) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.PENDING_CLASSIFICATION}', ACTIVE_TRIGGER_HASH = NULL, ATTEMPTS = 0 WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.PENDING_CLASSIFICATION}', BATCH_ID = NULL, ATTEMPTS = 0 WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
 
   /** Move rejected deal_states to filter_rejected */
   updateRejected: (schema, sqlQuotedIds) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.FILTER_REJECTED}', ACTIVE_TRIGGER_HASH = NULL WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.FILTER_REJECTED}', BATCH_ID = NULL WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
 }
 
 // ============================================================
@@ -115,7 +115,7 @@ export const filter = {
 
 export const detection = {
   /** Fetch deal_states + AI context for detection */
-  fetchBatchWithContext: (schema, triggerHash) =>
+  fetchBatchWithContext: (schema, batchId) =>
     `SELECT ds.EMAIL_METADATA_ID, ds.MESSAGE_ID, ds.USER_ID, ds.THREAD_ID, ds.SYNC_STATE_ID,
       latest_eval.AI_SUMMARY AS PREVIOUS_AI_SUMMARY,
       d.ID AS EXISTING_DEAL_ID
@@ -126,15 +126,15 @@ export const detection = {
       FROM ${schema}.EMAIL_THREAD_EVALUATIONS
     ) latest_eval ON latest_eval.THREAD_ID = ds.THREAD_ID AND latest_eval.RN = 1
     LEFT JOIN ${schema}.DEALS d ON d.THREAD_ID = ds.THREAD_ID AND d.USER_ID = ds.USER_ID
-    WHERE ds.ACTIVE_TRIGGER_HASH = '${triggerHash}'`,
+    WHERE ds.BATCH_ID = '${batchId}'`,
 
   /** Move deal deal_states to deal status */
   updateDeals: (schema, sqlQuotedIds) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.DEAL}', ACTIVE_TRIGGER_HASH = NULL WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.DEAL}', BATCH_ID = NULL WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
 
   /** Move non-deal deal_states to not_deal status */
   updateNotDeal: (schema, sqlQuotedIds) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.NOT_DEAL}', ACTIVE_TRIGGER_HASH = NULL WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.NOT_DEAL}', BATCH_ID = NULL WHERE EMAIL_METADATA_ID IN (${sqlQuotedIds})`,
 }
 
 // ============================================================
@@ -199,8 +199,8 @@ export const saveResults = {
 
 export const finalize = {
   /** Reset any deal_states still claimed by a trigger hash back to their pre-claim status */
-  resetLeftovers: (schema, triggerHash, resetStatus) =>
-    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${resetStatus}', ACTIVE_TRIGGER_HASH = NULL WHERE ACTIVE_TRIGGER_HASH = '${triggerHash}'`,
+  resetLeftovers: (schema, batchId, resetStatus) =>
+    `UPDATE ${schema}.DEAL_STATES SET STATUS = '${resetStatus}', BATCH_ID = NULL WHERE BATCH_ID = '${batchId}'`,
 }
 
 // ============================================================
@@ -209,8 +209,8 @@ export const finalize = {
 
 export const workflowTriggers = {
   /** Fetch current workflow_triggers for all deal_states claimed by a trigger hash */
-  fetchByTriggerHash: (schema, triggerHash) =>
-    `SELECT EMAIL_METADATA_ID, WORKFLOW_TRIGGERS FROM ${schema}.DEAL_STATES WHERE ACTIVE_TRIGGER_HASH = '${triggerHash}'`,
+  fetchByBatchId: (schema, batchId) =>
+    `SELECT EMAIL_METADATA_ID, WORKFLOW_TRIGGERS FROM ${schema}.DEAL_STATES WHERE BATCH_ID = '${batchId}'`,
 
   /** Update workflow_triggers for a single deal_state */
   update: (schema, emailMetadataId, serializedJson) =>
