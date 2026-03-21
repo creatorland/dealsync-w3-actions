@@ -39,17 +39,16 @@ export const orchestrator = {
       (SELECT COUNT(*) FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.PENDING}') AS PENDING_FILTER,
       (SELECT COUNT(*) FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.PENDING_CLASSIFICATION}') AS PENDING_CLASSIFY`,
 
-  /** Reset stale batches back to queue status (does NOT increment attempts — processor does that) */
-  expireStale: (schema, minutes = 10, maxAttempts = 3) =>
-    `UPDATE ${schema}.DEAL_STATES SET
-      STATUS = CASE
-        WHEN STATUS = '${STATUS.FILTERING}' THEN '${STATUS.PENDING}'
-        WHEN STATUS = '${STATUS.CLASSIFYING}' THEN '${STATUS.PENDING_CLASSIFICATION}'
-      END,
-      BATCH_ID = NULL
+  /** Find stuck batches that can be retried (not dead lettered) */
+  findStuckBatches: (schema, minutes = 10, maxAttempts = 3) =>
+    `SELECT BATCH_ID,
+      CASE WHEN STATUS = '${STATUS.FILTERING}' THEN 'filter' ELSE 'classify' END AS BATCH_TYPE
+    FROM ${schema}.DEAL_STATES
     WHERE STATUS IN ('${STATUS.FILTERING}', '${STATUS.CLASSIFYING}')
+    AND BATCH_ID IS NOT NULL
     AND ATTEMPTS < ${maxAttempts}
-    AND UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${minutes}' MINUTE`,
+    AND UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${minutes}' MINUTE
+    GROUP BY BATCH_ID, STATUS`,
 }
 
 // ============================================================

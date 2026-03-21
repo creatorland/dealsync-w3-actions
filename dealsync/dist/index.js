@@ -27690,6 +27690,31 @@ const STATUS = {
 };
 
 // ============================================================
+// ORCHESTRATOR QUERIES
+// ============================================================
+
+const orchestrator = {
+  /** Count deal_states at each status for concurrency and pending checks */
+  checkConcurrency: (schema) =>
+    `SELECT
+      (SELECT COUNT(*) FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.FILTERING}') AS ACTIVE_FILTER,
+      (SELECT COUNT(*) FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.CLASSIFYING}') AS ACTIVE_CLASSIFY,
+      (SELECT COUNT(*) FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.PENDING}') AS PENDING_FILTER,
+      (SELECT COUNT(*) FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.PENDING_CLASSIFICATION}') AS PENDING_CLASSIFY`,
+
+  /** Find stuck batches that can be retried (not dead lettered) */
+  findStuckBatches: (schema, minutes = 10, maxAttempts = 3) =>
+    `SELECT BATCH_ID,
+      CASE WHEN STATUS = '${STATUS.FILTERING}' THEN 'filter' ELSE 'classify' END AS BATCH_TYPE
+    FROM ${schema}.DEAL_STATES
+    WHERE STATUS IN ('${STATUS.FILTERING}', '${STATUS.CLASSIFYING}')
+    AND BATCH_ID IS NOT NULL
+    AND ATTEMPTS < ${maxAttempts}
+    AND UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${minutes}' MINUTE
+    GROUP BY BATCH_ID, STATUS`,
+};
+
+// ============================================================
 // DISPATCH QUERIES
 // ============================================================
 
@@ -28140,7 +28165,6 @@ async function claimFilter(apiUrl, jwt, biscuit, schema, batchSize, maxInFlight)
   const claimed = rows[0]?.CNT ?? 0;
   if (claimed === 0) return null
 
-  // Verify in-flight limit
   const inflight = await executeSql(apiUrl, jwt, biscuit, dispatch.countInFlight(schema, STATUS.FILTERING));
   if ((inflight[0]?.CNT ?? 0) > maxInFlight) {
     await executeSql(apiUrl, jwt, biscuit, dispatch.resetClaimed(schema, batchId, STATUS.PENDING));
@@ -28170,11 +28194,10 @@ async function claimClassify(apiUrl, jwt, biscuit, schema, batchSize, maxInFligh
 }
 
 /**
- * Dispatch command — pairs filter + classify batches in a single processor trigger.
- *
- * Each trigger can carry both a filter_batch_id and a classify_batch_id.
- * The processor runs both jobs in parallel if both are provided.
- * Falls back to single-job triggers when only one type of work is available.
+ * Dispatch command:
+ * 1. Retrigger stuck batches (same batch_id — processor resumes from checkpoint)
+ * 2. Claim + dispatch new filter batches
+ * 3. Claim + dispatch new classify batches
  */
 async function runDispatch() {
   const authUrl = coreExports.getInput('auth-url');
@@ -28193,13 +28216,41 @@ async function runDispatch() {
   console.log('[dispatch] Authenticating...');
   const jwt = await authenticate(authUrl, authSecret);
 
+  let retriggered = 0;
   let dispatchedFilter = 0;
   let dispatchedClassify = 0;
+
+  // 1. Retrigger stuck batches (processor resumes from audit checkpoint)
+  const stuckBatches = await executeSql(apiUrl, jwt, biscuit, orchestrator.findStuckBatches(schema));
+  for (const stuck of stuckBatches) {
+    const inputs = {};
+    if (stuck.BATCH_TYPE === 'filter') {
+      inputs.filter_batch_id = stuck.BATCH_ID;
+    } else {
+      inputs.classify_batch_id = stuck.BATCH_ID;
+    }
+
+    try {
+      const triggerUrl = `${w3RpcUrl}/workflow/${encodeURIComponent(processorName)}/trigger`;
+      const resp = await fetch(triggerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
+      retriggered++;
+      console.log(`[dispatch] Retriggered stuck ${stuck.BATCH_TYPE}: ${stuck.BATCH_ID}`);
+    } catch (err) {
+      console.log(`[dispatch] Retrigger failed for ${stuck.BATCH_ID}: ${err.message}`);
+    }
+    await sleep(100);
+  }
+
+  // 2. Dispatch new batches
   let filterExhausted = false;
   let classifyExhausted = false;
 
   while (!filterExhausted || !classifyExhausted) {
-    // Try to claim both types
     let filterBatch = null;
     let classifyBatch = null;
 
@@ -28213,15 +28264,12 @@ async function runDispatch() {
       if (!classifyBatch) classifyExhausted = true;
     }
 
-    // Nothing to dispatch
     if (!filterBatch && !classifyBatch) break
 
-    // Build trigger inputs
     const inputs = {};
     if (filterBatch) inputs.filter_batch_id = filterBatch.batchId;
     if (classifyBatch) inputs.classify_batch_id = classifyBatch.batchId;
 
-    // Trigger processor
     try {
       const triggerUrl = `${w3RpcUrl}/workflow/${encodeURIComponent(processorName)}/trigger`;
       const resp = await fetch(triggerUrl, {
@@ -28241,7 +28289,6 @@ async function runDispatch() {
       }
     } catch (err) {
       console.log(`[dispatch] Trigger failed: ${err.message}`);
-      // Reset both batches on trigger failure
       if (filterBatch) {
         await executeSql(apiUrl, jwt, biscuit, dispatch.resetClaimed(schema, filterBatch.batchId, STATUS.PENDING));
       }
@@ -28254,8 +28301,8 @@ async function runDispatch() {
     await sleep(100);
   }
 
-  console.log(`[dispatch] Done: ${dispatchedFilter} filter, ${dispatchedClassify} classify`);
-  return { dispatched_filter_count: dispatchedFilter, dispatched_classify_count: dispatchedClassify }
+  console.log(`[dispatch] Done: ${retriggered} retriggered, ${dispatchedFilter} filter, ${dispatchedClassify} classify`);
+  return { retriggered, dispatched_filter_count: dispatchedFilter, dispatched_classify_count: dispatchedClassify }
 }
 
 /**

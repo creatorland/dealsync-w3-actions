@@ -1,5 +1,5 @@
 import * as core from '@actions/core'
-import { dispatch, STATUS, sanitizeSchema } from '../../shared/queries.js'
+import { dispatch, orchestrator, STATUS, sanitizeSchema } from '../../shared/queries.js'
 import { authenticate, executeSql } from './sxt-client.js'
 
 function sleep(ms) {
@@ -32,7 +32,6 @@ async function claimFilter(apiUrl, jwt, biscuit, schema, batchSize, maxInFlight)
   const claimed = rows[0]?.CNT ?? 0
   if (claimed === 0) return null
 
-  // Verify in-flight limit
   const inflight = await executeSql(apiUrl, jwt, biscuit, dispatch.countInFlight(schema, STATUS.FILTERING))
   if ((inflight[0]?.CNT ?? 0) > maxInFlight) {
     await executeSql(apiUrl, jwt, biscuit, dispatch.resetClaimed(schema, batchId, STATUS.PENDING))
@@ -62,11 +61,10 @@ async function claimClassify(apiUrl, jwt, biscuit, schema, batchSize, maxInFligh
 }
 
 /**
- * Dispatch command — pairs filter + classify batches in a single processor trigger.
- *
- * Each trigger can carry both a filter_batch_id and a classify_batch_id.
- * The processor runs both jobs in parallel if both are provided.
- * Falls back to single-job triggers when only one type of work is available.
+ * Dispatch command:
+ * 1. Retrigger stuck batches (same batch_id — processor resumes from checkpoint)
+ * 2. Claim + dispatch new filter batches
+ * 3. Claim + dispatch new classify batches
  */
 export async function runDispatch() {
   const authUrl = core.getInput('auth-url')
@@ -85,13 +83,41 @@ export async function runDispatch() {
   console.log('[dispatch] Authenticating...')
   const jwt = await authenticate(authUrl, authSecret)
 
+  let retriggered = 0
   let dispatchedFilter = 0
   let dispatchedClassify = 0
+
+  // 1. Retrigger stuck batches (processor resumes from audit checkpoint)
+  const stuckBatches = await executeSql(apiUrl, jwt, biscuit, orchestrator.findStuckBatches(schema))
+  for (const stuck of stuckBatches) {
+    const inputs = {}
+    if (stuck.BATCH_TYPE === 'filter') {
+      inputs.filter_batch_id = stuck.BATCH_ID
+    } else {
+      inputs.classify_batch_id = stuck.BATCH_ID
+    }
+
+    try {
+      const triggerUrl = `${w3RpcUrl}/workflow/${encodeURIComponent(processorName)}/trigger`
+      const resp = await fetch(triggerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs }),
+      })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
+      retriggered++
+      console.log(`[dispatch] Retriggered stuck ${stuck.BATCH_TYPE}: ${stuck.BATCH_ID}`)
+    } catch (err) {
+      console.log(`[dispatch] Retrigger failed for ${stuck.BATCH_ID}: ${err.message}`)
+    }
+    await sleep(100)
+  }
+
+  // 2. Dispatch new batches
   let filterExhausted = false
   let classifyExhausted = false
 
   while (!filterExhausted || !classifyExhausted) {
-    // Try to claim both types
     let filterBatch = null
     let classifyBatch = null
 
@@ -105,15 +131,12 @@ export async function runDispatch() {
       if (!classifyBatch) classifyExhausted = true
     }
 
-    // Nothing to dispatch
     if (!filterBatch && !classifyBatch) break
 
-    // Build trigger inputs
     const inputs = {}
     if (filterBatch) inputs.filter_batch_id = filterBatch.batchId
     if (classifyBatch) inputs.classify_batch_id = classifyBatch.batchId
 
-    // Trigger processor
     try {
       const triggerUrl = `${w3RpcUrl}/workflow/${encodeURIComponent(processorName)}/trigger`
       const resp = await fetch(triggerUrl, {
@@ -133,7 +156,6 @@ export async function runDispatch() {
       }
     } catch (err) {
       console.log(`[dispatch] Trigger failed: ${err.message}`)
-      // Reset both batches on trigger failure
       if (filterBatch) {
         await executeSql(apiUrl, jwt, biscuit, dispatch.resetClaimed(schema, filterBatch.batchId, STATUS.PENDING))
       }
@@ -146,6 +168,6 @@ export async function runDispatch() {
     await sleep(100)
   }
 
-  console.log(`[dispatch] Done: ${dispatchedFilter} filter, ${dispatchedClassify} classify`)
-  return { dispatched_filter_count: dispatchedFilter, dispatched_classify_count: dispatchedClassify }
+  console.log(`[dispatch] Done: ${retriggered} retriggered, ${dispatchedFilter} filter, ${dispatchedClassify} classify`)
+  return { retriggered, dispatched_filter_count: dispatchedFilter, dispatched_classify_count: dispatchedClassify }
 }
