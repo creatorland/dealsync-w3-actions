@@ -3,7 +3,6 @@ import * as core from '@actions/core'
 import { buildPrompt } from './build-prompt.js'
 import {
   saveResults,
-  processor,
   sanitizeString,
   sanitizeSchema,
 } from '../../shared/queries.js'
@@ -47,9 +46,6 @@ export async function runFetchAndClassify() {
   }
 
   console.log(`[classify] ${metadataRows.length} deal_states`)
-
-  // Increment attempts
-  await executeSql(apiUrl, jwt, biscuit, processor.incrementAttempts(schema, batchId))
 
   // Check for existing audit (checkpoint)
   const existingAudit = await executeSql(apiUrl, jwt, biscuit, saveResults.getAuditByBatchId(schema, batchId))

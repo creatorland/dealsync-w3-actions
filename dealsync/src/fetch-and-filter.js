@@ -135,15 +135,7 @@ export async function runFetchAndFilter() {
 
   console.log(`[fetch-and-filter] found ${metadataRows.length} deal_states`)
 
-  // 2. Increment attempts
-  await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    `UPDATE ${schema}.DEAL_STATES SET ATTEMPTS = ATTEMPTS + 1 WHERE BATCH_ID = '${batchId}'`,
-  )
-
-  // 3. Fetch headers from content fetcher
+  // 2. Fetch headers from content fetcher
   const contentFetcherUrl = core.getInput('content-fetcher-url')
   const userId = metadataRows[0].USER_ID
   const syncStateId = metadataRows[0].SYNC_STATE_ID

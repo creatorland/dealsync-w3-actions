@@ -27702,16 +27702,17 @@ const orchestrator = {
       (SELECT COUNT(*) FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.PENDING}') AS PENDING_FILTER,
       (SELECT COUNT(*) FROM ${schema}.DEAL_STATES WHERE STATUS = '${STATUS.PENDING_CLASSIFICATION}') AS PENDING_CLASSIFY`,
 
-  /** Find stuck batches that can be retried (not dead lettered) */
-  findStuckBatches: (schema, minutes = 10, maxAttempts = 3) =>
-    `SELECT BATCH_ID,
-      CASE WHEN STATUS = '${STATUS.FILTERING}' THEN 'filter' ELSE 'classify' END AS BATCH_TYPE
-    FROM ${schema}.DEAL_STATES
-    WHERE STATUS IN ('${STATUS.FILTERING}', '${STATUS.CLASSIFYING}')
-    AND BATCH_ID IS NOT NULL
-    AND ATTEMPTS < ${maxAttempts}
-    AND UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${minutes}' MINUTE
-    GROUP BY BATCH_ID, STATUS`,
+  /** Find stuck batches that can be retried (retrigger count < maxRetriggers) */
+  findStuckBatches: (schema, minutes = 10, maxRetriggers = 3) =>
+    `SELECT ds.BATCH_ID,
+      CASE WHEN ds.STATUS = '${STATUS.FILTERING}' THEN 'filter' ELSE 'classify' END AS BATCH_TYPE
+    FROM ${schema}.DEAL_STATES ds
+    LEFT JOIN ${schema}.BATCH_EVENTS be ON be.BATCH_ID = ds.BATCH_ID AND be.EVENT_TYPE = 'retrigger'
+    WHERE ds.STATUS IN ('${STATUS.FILTERING}', '${STATUS.CLASSIFYING}')
+    AND ds.BATCH_ID IS NOT NULL
+    AND ds.UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${minutes}' MINUTE
+    GROUP BY ds.BATCH_ID, ds.STATUS
+    HAVING COUNT(be.TRIGGER_HASH) < ${maxRetriggers}`,
 };
 
 // ============================================================
@@ -27754,16 +27755,6 @@ const dispatch = {
   /** Reset claimed deal_states back to original status on trigger failure */
   resetClaimed: (schema, batchId, resetStatus) =>
     `UPDATE ${schema}.DEAL_STATES SET STATUS = '${resetStatus}', BATCH_ID = NULL WHERE BATCH_ID = '${batchId}'`,
-};
-
-// ============================================================
-// PROCESSOR QUERIES (shared across filter + classify)
-// ============================================================
-
-const processor = {
-  /** Increment attempts for all deal_states in a batch (called at processor start) */
-  incrementAttempts: (schema, batchId) =>
-    `UPDATE ${schema}.DEAL_STATES SET ATTEMPTS = ATTEMPTS + 1 WHERE BATCH_ID = '${batchId}'`,
 };
 
 // ============================================================
@@ -28648,15 +28639,7 @@ async function runFetchAndFilter() {
 
   console.log(`[fetch-and-filter] found ${metadataRows.length} deal_states`);
 
-  // 2. Increment attempts
-  await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    `UPDATE ${schema}.DEAL_STATES SET ATTEMPTS = ATTEMPTS + 1 WHERE BATCH_ID = '${batchId}'`,
-  );
-
-  // 3. Fetch headers from content fetcher
+  // 2. Fetch headers from content fetcher
   const contentFetcherUrl = coreExports.getInput('content-fetcher-url');
   const userId = metadataRows[0].USER_ID;
   const syncStateId = metadataRows[0].SYNC_STATE_ID;
@@ -28820,9 +28803,6 @@ async function runFetchAndClassify() {
   }
 
   console.log(`[classify] ${metadataRows.length} deal_states`);
-
-  // Increment attempts
-  await executeSql(apiUrl, jwt, biscuit, processor.incrementAttempts(schema, batchId));
 
   // Check for existing audit (checkpoint)
   const existingAudit = await executeSql(apiUrl, jwt, biscuit, saveResults.getAuditByBatchId(schema, batchId));
