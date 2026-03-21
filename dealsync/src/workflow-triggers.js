@@ -3,11 +3,11 @@ import { workflowTriggers, sanitizeSchema, sanitizeString } from '../../shared/q
 import { authenticate, executeSql } from './sxt-client.js'
 
 /**
- * Append or update workflow_triggers trail on deal_states claimed by a trigger hash.
+ * Append or update workflow_triggers trail on deal_states claimed by a batch ID.
  *
  * Actions:
  *   - "start": Append a new entry with success=false (called at processor start)
- *   - "complete": Update the last entry matching this trigger_hash to success=true
+ *   - "complete": Update the last entry matching this batch_id to success=true
  */
 export async function runWorkflowTriggers() {
   const authUrl = core.getInput('auth-url')
@@ -17,11 +17,10 @@ export async function runWorkflowTriggers() {
   const schema = sanitizeSchema(core.getInput('schema'))
 
   const action = core.getInput('trigger-action') // 'start' or 'complete'
-  const triggerHash = core.getInput('trigger-hash')
-  const parentTriggerHash = core.getInput('parent-trigger-hash') || ''
+  const batchId = core.getInput('batch-id')
   const triggerType = core.getInput('trigger-type') || 'filter' // 'filter' or 'detection'
 
-  if (!triggerHash) throw new Error('trigger-hash is required')
+  if (!batchId) throw new Error('batch-id is required')
   if (!['start', 'complete'].includes(action)) {
     throw new Error(`trigger-action must be "start" or "complete", got: ${action}`)
   }
@@ -33,7 +32,7 @@ export async function runWorkflowTriggers() {
     apiUrl,
     jwt,
     biscuit,
-    workflowTriggers.fetchByTriggerHash(schema, triggerHash),
+    workflowTriggers.fetchByBatchId(schema, batchId),
   )
 
   let updated = 0
@@ -49,15 +48,14 @@ export async function runWorkflowTriggers() {
     if (action === 'start') {
       triggers.push({
         type: triggerType,
-        trigger_hash: triggerHash,
-        parent_trigger_hash: parentTriggerHash,
+        batch_id: batchId,
         timestamp: new Date().toISOString(),
         success: false,
       })
     } else {
-      // complete: find last entry with this trigger_hash and set success=true
+      // complete: find last entry with this batch_id and set success=true
       for (let i = triggers.length - 1; i >= 0; i--) {
-        if (triggers[i].trigger_hash === triggerHash) {
+        if (triggers[i].batch_id === batchId) {
           triggers[i].success = true
           break
         }

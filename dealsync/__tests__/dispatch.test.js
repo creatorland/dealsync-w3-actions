@@ -50,8 +50,8 @@ function authResponse() {
   })
 }
 
-function triggerSuccess(hash = 'hash-123') {
-  return new Response(JSON.stringify({ triggerHash: hash }), {
+function triggerSuccess() {
+  return new Response(JSON.stringify({ triggerHash: 'w3-hash-123' }), {
     status: 200,
     headers: { 'content-type': 'application/json' },
   })
@@ -97,30 +97,37 @@ describe('dispatch command', () => {
     expect(core.info).toHaveBeenCalledWith('No pending emails to dispatch')
   })
 
-  it('triggers processor first, then claims filter batch with trigger hash', async () => {
+  it('claims filter batch first with UUIDv7 batch_id, then triggers processor', async () => {
     mockInputs({ 'pending-filter': '10', 'pending-detect': '0' })
 
     fetchSpy
       .mockResolvedValueOnce(authResponse()) // auth
-      .mockResolvedValueOnce(triggerSuccess('hash-filter-1')) // trigger → get hash
-      .mockResolvedValueOnce(sxtResponse()) // claim with hash
+      .mockResolvedValueOnce(sxtResponse()) // claim with batch_id
       .mockResolvedValueOnce(sxtResponse([{ CNT: 10 }])) // verify claim
-      .mockResolvedValueOnce(triggerSuccess('hash-filter-2')) // trigger batch 2
+      .mockResolvedValueOnce(triggerSuccess()) // trigger processor
       .mockResolvedValueOnce(sxtResponse()) // claim batch 2
-      .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }])) // verify = 0
-      .mockResolvedValueOnce(sxtResponse()) // reset unclaimed
+      .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }])) // verify = 0, stop
 
     const result = await runDispatch()
 
     expect(result.dispatched_filter_count).toBe(1)
-    expect(result.dispatched_detect_count).toBe(0)
 
-    // Verify claim SQL uses trigger hash
+    // Verify claim SQL uses BATCH_ID with UUID format
     const sqlCalls = getSqlCalls(fetchSpy)
     const claimSql = getSqlText(sqlCalls[0])
     expect(claimSql).toContain("STATUS = 'filtering'")
-    expect(claimSql).toContain("ACTIVE_TRIGGER_HASH = 'hash-filter-1'")
-    expect(claimSql).toContain("STATUS = 'pending'")
+    expect(claimSql).toContain('BATCH_ID')
+    // UUID v7 format: 8-4-4-4-12 hex chars
+    expect(claimSql).toMatch(/BATCH_ID = '[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}'/)
+
+    // Verify trigger payload includes batch_id
+    const triggerCalls = getTriggerCalls(fetchSpy)
+    const body = JSON.parse(triggerCalls[0][1].body)
+    expect(body.inputs.batch_type).toBe('filter')
+    expect(body.inputs.batch_id).toMatch(/^[0-9a-f]{8}-/)
+    // No transition_stage or trigger_hash in payload
+    expect(body.inputs.transition_stage).toBeUndefined()
+    expect(body.inputs.trigger_hash).toBeUndefined()
   })
 
   it('claims detection batch with thread-completeness check', async () => {
@@ -128,13 +135,11 @@ describe('dispatch command', () => {
 
     fetchSpy
       .mockResolvedValueOnce(authResponse())
-      .mockResolvedValueOnce(triggerSuccess('hash-detect-1')) // trigger
       .mockResolvedValueOnce(sxtResponse()) // claim
       .mockResolvedValueOnce(sxtResponse([{ CNT: 5 }])) // verify
-      .mockResolvedValueOnce(triggerSuccess('hash-detect-2')) // trigger batch 2
+      .mockResolvedValueOnce(triggerSuccess()) // trigger
       .mockResolvedValueOnce(sxtResponse()) // claim batch 2
       .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }])) // verify = 0
-      .mockResolvedValueOnce(sxtResponse()) // reset unclaimed
 
     const result = await runDispatch()
 
@@ -147,60 +152,36 @@ describe('dispatch command', () => {
     expect(claimSql).toContain("ds2.STATUS IN ('pending', 'filtering')")
   })
 
-  it('sends REST trigger with correct payload (no transition_stage)', async () => {
+  it('resets claimed emails on trigger failure', async () => {
     mockInputs({ 'pending-filter': '10', 'pending-detect': '0' })
 
     fetchSpy
       .mockResolvedValueOnce(authResponse())
-      .mockResolvedValueOnce(triggerSuccess('hash-abc'))
-      .mockResolvedValueOnce(sxtResponse())
-      .mockResolvedValueOnce(sxtResponse([{ CNT: 10 }]))
-      .mockResolvedValueOnce(triggerSuccess('hash-xyz'))
-      .mockResolvedValueOnce(sxtResponse())
-      .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }]))
+      .mockResolvedValueOnce(sxtResponse()) // claim
+      .mockResolvedValueOnce(sxtResponse([{ CNT: 10 }])) // verify
+      .mockResolvedValueOnce(triggerError()) // trigger fails
       .mockResolvedValueOnce(sxtResponse()) // reset
-
-    await runDispatch()
-
-    const triggerCalls = getTriggerCalls(fetchSpy)
-    expect(triggerCalls.length).toBeGreaterThanOrEqual(1)
-    expect(triggerCalls[0][0]).toBe(
-      'https://w3.example.com/workflow/Dealsync%20Processor/trigger',
-    )
-    const body = JSON.parse(triggerCalls[0][1].body)
-    expect(body).toEqual({
-      inputs: { batch_type: 'filter' },
-    })
-    // No transition_stage or reset_stage in payload
-    expect(body.inputs.transition_stage).toBeUndefined()
-    expect(body.inputs.reset_stage).toBeUndefined()
-  })
-
-  it('breaks on trigger failure without resetting (nothing claimed yet)', async () => {
-    mockInputs({ 'pending-filter': '10', 'pending-detect': '0' })
-
-    fetchSpy
-      .mockResolvedValueOnce(authResponse())
-      .mockResolvedValueOnce(triggerError()) // trigger fails before any claim
 
     const result = await runDispatch()
 
     expect(result.dispatched_filter_count).toBe(0)
     expect(core.error).toHaveBeenCalledWith(expect.stringContaining('Filter trigger failed'))
 
-    // No SQL calls to reset since nothing was claimed
+    // Last SQL call should reset
     const sqlCalls = getSqlCalls(fetchSpy)
-    expect(sqlCalls).toHaveLength(0)
+    const resetSql = getSqlText(sqlCalls[sqlCalls.length - 1])
+    expect(resetSql).toContain("STATUS = 'pending'")
+    expect(resetSql).toContain('BATCH_ID')
   })
 
-  it('resets detection to pending_classification on empty claim', async () => {
+  it('resets detection to pending_classification on trigger failure', async () => {
     mockInputs({ 'pending-filter': '0', 'pending-detect': '10' })
 
     fetchSpy
       .mockResolvedValueOnce(authResponse())
-      .mockResolvedValueOnce(triggerSuccess('hash-d1'))
       .mockResolvedValueOnce(sxtResponse()) // claim
-      .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }])) // verify = 0
+      .mockResolvedValueOnce(sxtResponse([{ CNT: 5 }])) // verify
+      .mockResolvedValueOnce(triggerError()) // trigger fails
       .mockResolvedValueOnce(sxtResponse()) // reset
 
     const result = await runDispatch()
@@ -210,7 +191,6 @@ describe('dispatch command', () => {
     const sqlCalls = getSqlCalls(fetchSpy)
     const resetSql = getSqlText(sqlCalls[sqlCalls.length - 1])
     expect(resetSql).toContain("STATUS = 'pending_classification'")
-    expect(resetSql).toContain("ACTIVE_TRIGGER_HASH = 'hash-d1'")
   })
 
   it('claims multiple batches per run', async () => {
@@ -222,28 +202,27 @@ describe('dispatch command', () => {
 
     fetchSpy
       .mockResolvedValueOnce(authResponse())
-      // Batch 0: trigger + claim + verify
-      .mockResolvedValueOnce(triggerSuccess('hash-b0'))
+      // Batch 0: claim + verify + trigger
       .mockResolvedValueOnce(sxtResponse())
       .mockResolvedValueOnce(sxtResponse([{ CNT: 25 }]))
-      // Batch 1: trigger + claim + verify
-      .mockResolvedValueOnce(triggerSuccess('hash-b1'))
+      .mockResolvedValueOnce(triggerSuccess())
+      // Batch 1: claim + verify + trigger
       .mockResolvedValueOnce(sxtResponse())
       .mockResolvedValueOnce(sxtResponse([{ CNT: 25 }]))
-      // Batch 2: trigger + claim + verify = 0 + reset
-      .mockResolvedValueOnce(triggerSuccess('hash-b2'))
+      .mockResolvedValueOnce(triggerSuccess())
+      // Batch 2: claim + verify = 0
       .mockResolvedValueOnce(sxtResponse())
       .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }]))
-      .mockResolvedValueOnce(sxtResponse()) // reset
 
     const result = await runDispatch()
 
     expect(result.dispatched_filter_count).toBe(2)
 
-    // Verify different trigger hashes used
+    // Verify different batch IDs used
     const sqlCalls = getSqlCalls(fetchSpy)
-    expect(getSqlText(sqlCalls[0])).toContain("ACTIVE_TRIGGER_HASH = 'hash-b0'")
-    expect(getSqlText(sqlCalls[2])).toContain("ACTIVE_TRIGGER_HASH = 'hash-b1'")
+    const batch0Id = getSqlText(sqlCalls[0]).match(/BATCH_ID = '([^']+)'/)[1]
+    const batch1Id = getSqlText(sqlCalls[2]).match(/BATCH_ID = '([^']+)'/)[1]
+    expect(batch0Id).not.toBe(batch1Id)
   })
 
   it('stops when claim returns 0 emails', async () => {
@@ -251,31 +230,29 @@ describe('dispatch command', () => {
 
     fetchSpy
       .mockResolvedValueOnce(authResponse())
-      .mockResolvedValueOnce(triggerSuccess('hash-empty'))
       .mockResolvedValueOnce(sxtResponse()) // claim
       .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }])) // verify = 0
-      .mockResolvedValueOnce(sxtResponse()) // reset
 
     const result = await runDispatch()
 
     expect(result.dispatched_filter_count).toBe(0)
+    // No trigger calls since nothing was claimed
+    const triggerCalls = getTriggerCalls(fetchSpy)
+    expect(triggerCalls).toHaveLength(0)
   })
 
   it('rejects negative numbers in inputs', async () => {
     mockInputs({ 'active-filter': '-5' })
-
     await expect(runDispatch()).rejects.toThrow('active-filter must be non-negative integer')
   })
 
   it('rejects non-numeric inputs', async () => {
     mockInputs({ 'max-filter': 'abc' })
-
     await expect(runDispatch()).rejects.toThrow('max-filter must be non-negative integer')
   })
 
   it('rejects invalid schema', async () => {
     mockInputs({ schema: 'schema; DROP TABLE' })
-
     await expect(runDispatch()).rejects.toThrow('Invalid schema')
   })
 
@@ -284,10 +261,8 @@ describe('dispatch command', () => {
 
     fetchSpy
       .mockResolvedValueOnce(authResponse())
-      .mockResolvedValueOnce(triggerSuccess('hash-auth'))
-      .mockResolvedValueOnce(sxtResponse())
-      .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }]))
-      .mockResolvedValueOnce(sxtResponse()) // reset
+      .mockResolvedValueOnce(sxtResponse()) // claim
+      .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }])) // verify = 0
 
     await runDispatch()
 

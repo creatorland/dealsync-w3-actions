@@ -58,6 +58,12 @@ inputs:
     description: 'SQL statement (sxt-query, sxt-execute)'
   sxt-command:
     description: 'SxT operation type: query or execute (sxt-query, sxt-execute)'
+  batch-id:
+    description: 'Batch ID for workflow-triggers command'
+  trigger-action:
+    description: 'Action for workflow-triggers: start or complete'
+  trigger-type:
+    description: 'Type for workflow-triggers: filter or detection'
 
 outputs:
   success:
