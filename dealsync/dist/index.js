@@ -27414,24 +27414,24 @@ var marketingHeaders = {
 	tools: tools
 };
 
-function sanitizeId$1(id) {
+function sanitizeId$2(id) {
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     throw new Error(`Invalid ID format: ${id}`)
   }
   return id
 }
 
-function getHeader$1(email, name) {
+function getHeader$2(email, name) {
   const header = email.topLevelHeaders?.find((h) => h.name.toLowerCase() === name.toLowerCase());
   return header?.value || ''
 }
 
-function extractEmailAddress(from) {
+function extractEmailAddress$1(from) {
   const match = from.match(/<([^>]+)>/);
   return (match ? match[1] : from).trim().toLowerCase()
 }
 
-function extractDisplayName(from) {
+function extractDisplayName$1(from) {
   const match = from.match(/^(.+?)\s*</);
   return match
     ? match[1]
@@ -27442,7 +27442,7 @@ function extractDisplayName(from) {
 }
 
 function checkAuthenticationResults(email) {
-  const authResults = getHeader$1(email, 'authentication-results');
+  const authResults = getHeader$2(email, 'authentication-results');
   if (!authResults) return false
   const hasDkim = authResults.includes('dkim=pass');
   const hasSpf = authResults.includes('spf=pass');
@@ -27451,9 +27451,9 @@ function checkAuthenticationResults(email) {
 }
 
 function checkSender(email) {
-  const fromValue = getHeader$1(email, 'from');
+  const fromValue = getHeader$2(email, 'from');
   if (!fromValue) return false
-  const emailAddr = extractEmailAddress(fromValue);
+  const emailAddr = extractEmailAddress$1(fromValue);
   for (const prefix of blockedPrefixes) {
     if (emailAddr.startsWith(prefix)) return true
   }
@@ -27478,7 +27478,7 @@ function checkBulkHeaders(email) {
       if (value.includes(tool)) return true
     }
   }
-  const precedence = getHeader$1(email, 'precedence').toLowerCase();
+  const precedence = getHeader$2(email, 'precedence').toLowerCase();
   for (const val of marketingHeaders.values) {
     if (precedence.includes(val)) return true
   }
@@ -27486,7 +27486,7 @@ function checkBulkHeaders(email) {
 }
 
 function checkSubject(email) {
-  const subject = getHeader$1(email, 'subject').toLowerCase();
+  const subject = getHeader$2(email, 'subject').toLowerCase();
   if (!subject) return false
   for (const term of automatedSubjects) {
     if (subject.includes(term.toLowerCase())) return true
@@ -27495,17 +27495,17 @@ function checkSubject(email) {
 }
 
 function checkSenderName(email) {
-  const fromValue = getHeader$1(email, 'from');
+  const fromValue = getHeader$2(email, 'from');
   if (!fromValue) return false
-  const displayName = extractDisplayName(fromValue);
+  const displayName = extractDisplayName$1(fromValue);
   if (!displayName) return false
   return nonPersonalizedNames.some((name) => displayName === name.toLowerCase())
 }
 
 function checkFreeEmail(email) {
-  const fromValue = getHeader$1(email, 'from');
+  const fromValue = getHeader$2(email, 'from');
   if (!fromValue) return false
-  const emailAddr = extractEmailAddress(fromValue);
+  const emailAddr = extractEmailAddress$1(fromValue);
   for (const pattern of freeEmailPatterns) {
     const regex = new RegExp(pattern, 'i');
     if (regex.test(emailAddr)) return true
@@ -27549,8 +27549,8 @@ async function runFilter() {
   }
 
   return {
-    filtered_ids: filteredIds.map((id) => `'${sanitizeId$1(id)}'`).join(','),
-    rejected_ids: rejectedIds.map((id) => `'${sanitizeId$1(id)}'`).join(','),
+    filtered_ids: filteredIds.map((id) => `'${sanitizeId$2(id)}'`).join(','),
+    rejected_ids: rejectedIds.map((id) => `'${sanitizeId$2(id)}'`).join(','),
   }
 }
 
@@ -27584,7 +27584,7 @@ Rules:
 
 {{CLASSIFICATION_INSTRUCTIONS}}`;
 
-function getHeader(email, name) {
+function getHeader$1(email, name) {
   const header = email.topLevelHeaders?.find((h) => h.name.toLowerCase() === name.toLowerCase());
   return header?.value || ''
 }
@@ -27615,9 +27615,9 @@ function buildPrompt(emails) {
     }
 
     threadEmails.forEach((email, i) => {
-      const from = getHeader(email, 'from');
-      const subject = getHeader(email, 'subject');
-      const date = getHeader(email, 'date');
+      const from = getHeader$1(email, 'from');
+      const subject = getHeader$1(email, 'subject');
+      const date = getHeader$1(email, 'date');
       threadData += `Email ${i + 1}: From: ${from} | Subject: ${subject} | Date: ${date}\n`;
       const body = email.body || email.replyBody || '[no body]';
       threadData += `Body: ${body}\n\n`;
@@ -27821,7 +27821,7 @@ const workflowTriggers = {
 // UTILITIES
 // ============================================================
 
-function sanitizeId(id) {
+function sanitizeId$1(id) {
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     throw new Error(`Invalid ID format: ${id}`)
   }
@@ -27833,7 +27833,7 @@ function sanitizeString(s) {
 }
 
 function toSqlIdList(ids) {
-  return ids.map((id) => `'${sanitizeId(id)}'`).join(',')
+  return ids.map((id) => `'${sanitizeId$1(id)}'`).join(',')
 }
 
 function sanitizeSchema(schema) {
@@ -27930,10 +27930,10 @@ async function runClassify() {
 
   for (const thread of threads) {
     try {
-      const threadId = sanitizeId(thread.thread_id);
+      const threadId = sanitizeId$1(thread.thread_id);
       const threadEmails = metadataByThread[threadId] || [];
       const emailCount = threadEmails.length;
-      const userId = threadEmails.length > 0 ? sanitizeId(threadEmails[0].USER_ID) : '';
+      const userId = threadEmails.length > 0 ? sanitizeId$1(threadEmails[0].USER_ID) : '';
 
       // a. INSERT AI_EVALUATION_AUDITS
       const auditId = crypto.randomUUID();
@@ -28459,6 +28459,200 @@ async function runWorkflowTriggers() {
   return { updated }
 }
 
+function sanitizeId(id) {
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error(`Invalid ID format: ${id}`)
+  return id
+}
+
+function getHeader(email, name) {
+  const header = email.topLevelHeaders?.find((h) => h.name.toLowerCase() === name.toLowerCase());
+  return header?.value || ''
+}
+
+function extractEmailAddress(from) {
+  const match = from.match(/<([^>]+)>/);
+  return (match ? match[1] : from).trim().toLowerCase()
+}
+
+function extractDisplayName(from) {
+  const match = from.match(/^(.+?)\s*</);
+  return match ? match[1].trim().replace(/^["']|["']$/g, '').toLowerCase() : ''
+}
+
+function isRejected(email) {
+  // Rule 1: Authentication results
+  const authResults = getHeader(email, 'authentication-results');
+  if (authResults) {
+    const hasDkim = authResults.includes('dkim=pass');
+    const hasSpf = authResults.includes('spf=pass');
+    const hasDmarc = authResults.includes('dmarc=pass');
+    if (!hasDkim && !hasSpf && !hasDmarc) return true
+  }
+
+  // Rule 2: Blocked sender
+  const fromValue = getHeader(email, 'from');
+  if (fromValue) {
+    const emailAddr = extractEmailAddress(fromValue);
+    for (const prefix of blockedPrefixes) {
+      if (emailAddr.startsWith(prefix)) return true
+    }
+    const atIndex = emailAddr.indexOf('@');
+    if (atIndex !== -1) {
+      const domain = emailAddr.slice(atIndex + 1);
+      for (const blockedDomain of blockedDomains) {
+        if (domain.includes(blockedDomain)) return true
+      }
+    }
+  }
+
+  // Rule 3: Bulk headers
+  const headers = email.topLevelHeaders || [];
+  for (const bulkHeader of marketingHeaders.headers) {
+    if (headers.find((h) => h.name.toLowerCase() === bulkHeader.toLowerCase())) return true
+  }
+  for (const header of headers) {
+    const value = (header.value || '').toLowerCase();
+    for (const tool of marketingHeaders.tools) {
+      if (value.includes(tool)) return true
+    }
+  }
+  const precedence = getHeader(email, 'precedence').toLowerCase();
+  for (const val of marketingHeaders.values) {
+    if (precedence.includes(val)) return true
+  }
+
+  // Rule 4: Automated subject
+  const subject = getHeader(email, 'subject').toLowerCase();
+  if (subject) {
+    for (const term of automatedSubjects) {
+      if (subject.includes(term.toLowerCase())) return true
+    }
+  }
+
+  // Rule 5: Non-personalized sender name
+  if (fromValue) {
+    const displayName = extractDisplayName(fromValue);
+    if (displayName && nonPersonalizedNames.some((name) => displayName === name.toLowerCase())) {
+      return true
+    }
+  }
+
+  // Rule 6: Free email with non-personal prefix
+  if (fromValue) {
+    const emailAddr = extractEmailAddress(fromValue);
+    for (const pattern of freeEmailPatterns) {
+      if (new RegExp(pattern, 'i').test(emailAddr)) return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * Combined fetch-headers + filter command.
+ * Fetches email headers from content fetcher, applies filter rules,
+ * and returns filtered/rejected ID lists ready for SxT updates.
+ *
+ * No large data passes between steps — only small ID lists in output.
+ */
+async function runFetchAndFilter() {
+  const authUrl = coreExports.getInput('auth-url');
+  const authSecret = coreExports.getInput('auth-secret');
+  const apiUrl = coreExports.getInput('api-url');
+  const biscuit = coreExports.getInput('biscuit');
+  const schema = sanitizeSchema(coreExports.getInput('schema'));
+  const batchId = coreExports.getInput('batch-id');
+
+  if (!batchId) throw new Error('batch-id is required')
+
+  console.log(`[fetch-and-filter] starting for batch ${batchId}`);
+
+  // 1. Authenticate + fetch metadata from SxT
+  const jwt = await authenticate(authUrl, authSecret);
+  const metadataRows = await executeSql(
+    apiUrl,
+    jwt,
+    biscuit,
+    `SELECT EMAIL_METADATA_ID, MESSAGE_ID, USER_ID, SYNC_STATE_ID, THREAD_ID FROM ${schema}.DEAL_STATES WHERE BATCH_ID = '${batchId}'`,
+  );
+
+  if (!metadataRows || metadataRows.length === 0) {
+    console.log('[fetch-and-filter] no rows found for batch');
+    return { filtered_ids: '', rejected_ids: '', total: 0 }
+  }
+
+  console.log(`[fetch-and-filter] found ${metadataRows.length} deal_states`);
+
+  // 2. Increment attempts
+  await executeSql(
+    apiUrl,
+    jwt,
+    biscuit,
+    `UPDATE ${schema}.DEAL_STATES SET ATTEMPTS = ATTEMPTS + 1 WHERE BATCH_ID = '${batchId}'`,
+  );
+
+  // 3. Fetch headers from content fetcher
+  const contentFetcherUrl = coreExports.getInput('content-fetcher-url');
+  const userId = metadataRows[0].USER_ID;
+  const syncStateId = metadataRows[0].SYNC_STATE_ID;
+  const messageIds = metadataRows.map((r) => r.MESSAGE_ID);
+
+  const MAX_PER_BATCH = 50;
+  const allEmails = [];
+
+  for (let i = 0; i < messageIds.length; i += MAX_PER_BATCH) {
+    const chunk = messageIds.slice(i, i + MAX_PER_BATCH);
+    try {
+      const resp = await fetch(`${contentFetcherUrl}/email-content/fetch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, syncStateId, messageIds: chunk }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
+      const result = await resp.json();
+      const emails = result.data || result;
+
+      for (const email of emails) {
+        const meta = metadataRows.find((r) => r.MESSAGE_ID === email.messageId);
+        if (meta) {
+          email.id = meta.EMAIL_METADATA_ID;
+          // Only keep header fields
+          delete email.body;
+          delete email.replyBody;
+          delete email.attachments;
+        }
+        allEmails.push(email);
+      }
+    } catch (err) {
+      console.log(`[fetch-and-filter] content fetch failed for chunk: ${err.message}`);
+    }
+  }
+
+  console.log(`[fetch-and-filter] fetched ${allEmails.length} emails, applying filter rules`);
+
+  // 4. Apply filter rules
+  const filteredIds = [];
+  const rejectedIds = [];
+
+  for (const email of allEmails) {
+    if (isRejected(email)) {
+      rejectedIds.push(email.id);
+    } else {
+      filteredIds.push(email.id);
+    }
+  }
+
+  console.log(
+    `[fetch-and-filter] result: ${filteredIds.length} passed, ${rejectedIds.length} rejected`,
+  );
+
+  return {
+    filtered_ids: filteredIds.map((id) => `'${sanitizeId(id)}'`).join(','),
+    rejected_ids: rejectedIds.map((id) => `'${sanitizeId(id)}'`).join(','),
+    total: allEmails.length,
+  }
+}
+
 const COMMANDS = {
   filter: runFilter,
   'build-prompt': runBuildPrompt,
@@ -28469,6 +28663,7 @@ const COMMANDS = {
   'sxt-execute': runSxtQuery,
   'fetch-content': runFetchContent,
   'workflow-triggers': runWorkflowTriggers,
+  'fetch-and-filter': runFetchAndFilter,
 };
 
 async function run() {
