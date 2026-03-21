@@ -21,8 +21,9 @@ const COMMANDS = {
 }
 
 export async function run() {
+  let command = 'unknown'
   try {
-    const command = core.getInput('command', { required: true })
+    command = core.getInput('command', { required: true })
     const handler = COMMANDS[command]
     if (!handler) {
       core.setFailed(
