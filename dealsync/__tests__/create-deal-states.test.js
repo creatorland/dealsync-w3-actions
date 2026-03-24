@@ -117,10 +117,9 @@ describe('create-deal-states command', () => {
     expect(sqlCalls).toHaveLength(1)
   })
 
-  it('batches inserts in chunks of 25', async () => {
+  it('inserts all rows in a single INSERT statement', async () => {
     mockInputs()
 
-    // Generate 60 rows to test chunking (60 / 25 = 3 batches: 25, 25, 10)
     const diffRows = Array.from({ length: 60 }, (_, i) => ({
       ID: `em-${i}`,
       USER_ID: `user-${i}`,
@@ -131,26 +130,19 @@ describe('create-deal-states command', () => {
     fetchSpy
       .mockResolvedValueOnce(authResponse()) // auth
       .mockResolvedValueOnce(sxtResponse(diffRows)) // diff query
-      .mockResolvedValueOnce(sxtResponse()) // insert batch 1 (25)
-      .mockResolvedValueOnce(sxtResponse()) // insert batch 2 (25)
-      .mockResolvedValueOnce(sxtResponse()) // insert batch 3 (10)
+      .mockResolvedValueOnce(sxtResponse()) // single insert
 
     const result = await runCreateDealStates()
 
     expect(result).toEqual({ created_count: 60, skipped_count: 0 })
 
     const sqlCalls = getSqlCalls(fetchSpy)
-    expect(sqlCalls).toHaveLength(4) // diff + 3 inserts
+    expect(sqlCalls).toHaveLength(2) // diff + 1 insert
 
-    // Verify first insert batch has 25 rows
-    const firstInsertSql = getSqlText(sqlCalls[1])
-    expect(firstInsertSql).toContain("'em-0'")
-    expect(firstInsertSql).toContain("'em-24'")
-
-    // Verify third insert batch has 10 rows
-    const thirdInsertSql = getSqlText(sqlCalls[3])
-    expect(thirdInsertSql).toContain("'em-50'")
-    expect(thirdInsertSql).toContain("'em-59'")
+    // Verify single insert contains all rows
+    const insertSql = getSqlText(sqlCalls[1])
+    expect(insertSql).toContain("'em-0'")
+    expect(insertSql).toContain("'em-59'")
   })
 
   it('rejects invalid schema', async () => {

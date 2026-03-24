@@ -3,11 +3,10 @@ import * as core from '@actions/core'
 import { sanitizeSchema } from '../../shared/queries.js'
 import { authenticate, executeSql } from './sxt-client.js'
 
-const BATCH_SIZE = 25
-
 /**
  * Query the diff between email_metadata and deal_states,
  * then insert missing deal_states rows with status='pending'.
+ * Inserts all rows in a single INSERT statement (batch size controlled by orchestrator).
  */
 export async function runCreateDealStates() {
   const authUrl = core.getInput('auth-url')
@@ -38,32 +37,19 @@ LIMIT ${limit} OFFSET ${offset}`
 
   console.log(`[create-deal-states] found ${rows.length} new email(s) to insert`)
 
-  let createdCount = 0
-  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const chunk = rows.slice(i, i + BATCH_SIZE)
-    const values = chunk
-      .map((em) => {
-        const id = crypto.randomUUID()
-        const threadId = em.THREAD_ID || ''
-        const messageId = em.MESSAGE_ID || ''
-        return `('${id}', '${em.ID}', '${em.USER_ID}', '${threadId}', '${messageId}', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-      })
-      .join(', ')
+  const values = rows
+    .map((em) => {
+      const id = crypto.randomUUID()
+      const threadId = em.THREAD_ID || ''
+      const messageId = em.MESSAGE_ID || ''
+      return `('${id}', '${em.ID}', '${em.USER_ID}', '${threadId}', '${messageId}', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    })
+    .join(', ')
 
-    const insertSql = `INSERT INTO ${schema}.DEAL_STATES (ID, EMAIL_METADATA_ID, USER_ID, THREAD_ID, MESSAGE_ID, STATUS, CREATED_AT, UPDATED_AT) VALUES ${values} ON CONFLICT (EMAIL_METADATA_ID) DO NOTHING`
+  const insertSql = `INSERT INTO ${schema}.DEAL_STATES (ID, EMAIL_METADATA_ID, USER_ID, THREAD_ID, MESSAGE_ID, STATUS, CREATED_AT, UPDATED_AT) VALUES ${values} ON CONFLICT (EMAIL_METADATA_ID) DO NOTHING`
 
-    try {
-      await executeSql(apiUrl, jwt, biscuit, insertSql)
-      createdCount += chunk.length
-      console.log(`[create-deal-states] inserted batch ${Math.floor(i / BATCH_SIZE) + 1} (${chunk.length} rows)`)
-    } catch (err) {
-      // Log the first failing SQL for debugging, then re-throw
-      console.error(`[create-deal-states] batch ${Math.floor(i / BATCH_SIZE) + 1} failed. SQL length=${insertSql.length}, rows=${chunk.length}`)
-      console.error(`[create-deal-states] first row ID: ${chunk[0]?.ID}, error: ${err.message.substring(0, 200)}`)
-      throw err
-    }
-  }
+  await executeSql(apiUrl, jwt, biscuit, insertSql)
 
-  console.log(`[create-deal-states] done: created=${createdCount}`)
-  return { created_count: createdCount, skipped_count: 0 }
+  console.log(`[create-deal-states] done: inserted ${rows.length} rows`)
+  return { created_count: rows.length, skipped_count: 0 }
 }
