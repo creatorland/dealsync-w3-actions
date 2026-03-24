@@ -46,14 +46,12 @@ function buildThreadData(emails) {
   return parts.join('')
 }
 
-export function buildPrompt(emails) {
+export function buildPrompt(emails, { systemOverride, userOverride } = {}) {
   const threadData = buildThreadData(emails)
 
-  // System prompt contains all static instructions + examples (prefix-cacheable)
-  const systemPrompt = systemTemplate.trim()
+  const systemPrompt = (systemOverride || systemTemplate).trim()
 
-  // User prompt is minimal: framing + thread data (all instructions are in system prompt for prefix caching)
-  const userPrompt = classificationInstructions
+  const userPrompt = (userOverride || classificationInstructions)
     .replace('{{THREAD_DATA}}', threadData)
     .trim()
 

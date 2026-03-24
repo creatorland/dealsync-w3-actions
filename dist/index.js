@@ -34555,14 +34555,12 @@ function buildThreadData(emails) {
   return parts.join('')
 }
 
-function buildPrompt(emails) {
+function buildPrompt(emails, { systemOverride, userOverride } = {}) {
   const threadData = buildThreadData(emails);
 
-  // System prompt contains all static instructions + examples (prefix-cacheable)
-  const systemPrompt = systemTemplate.trim();
+  const systemPrompt = (systemOverride || systemTemplate).trim();
 
-  // User prompt is minimal: framing + thread data (all instructions are in system prompt for prefix caching)
-  const userPrompt = classificationInstructions
+  const userPrompt = (userOverride || classificationInstructions)
     .replace('{{THREAD_DATA}}', threadData)
     .trim();
 
@@ -37987,21 +37985,44 @@ var groundTruth = [
 	}
 ];
 
+const PROMPT_BASE_URL = 'https://raw.githubusercontent.com/creatorland/dealsync-action';
+
+async function fetchPromptsByHash(hash) {
+  const [systemResp, userResp] = await Promise.all([
+    fetch(`${PROMPT_BASE_URL}/${hash}/prompts/system.md`),
+    fetch(`${PROMPT_BASE_URL}/${hash}/prompts/user.md`),
+  ]);
+  if (!systemResp.ok) throw new Error(`Failed to fetch system.md at ${hash}: HTTP ${systemResp.status}`)
+  if (!userResp.ok) throw new Error(`Failed to fetch user.md at ${hash}: HTTP ${userResp.status}`)
+  return {
+    systemOverride: await systemResp.text(),
+    userOverride: await userResp.text(),
+  }
+}
+
 async function runEval() {
   const hyperbolicKey = coreExports.getInput('hyperbolic-key');
   const model = coreExports.getInput('primary-model') || 'Qwen/Qwen3-235B-A22B-Instruct-2507';
   const aiApiUrl = coreExports.getInput('ai-api-url') || 'https://api.hyperbolic.xyz/v1/chat/completions';
   const numRuns = parseInt(coreExports.getInput('runs') || '10', 10);
   const temperature = parseFloat(coreExports.getInput('temperature') || '0');
-  const batchSize = parseInt(coreExports.getInput('batch-size') || '0', 10); // 0 = all at once
+  const batchSize = parseInt(coreExports.getInput('batch-size') || '1', 10);
+  const promptHash = coreExports.getInput('prompt-hash') || '';
 
   if (!hyperbolicKey) throw new Error('hyperbolic-key is required for eval')
+
+  // Fetch prompts from a specific commit hash, or use bundled defaults
+  let promptOverrides = {};
+  if (promptHash) {
+    console.log(`[eval] fetching prompts from commit ${promptHash}`);
+    promptOverrides = await fetchPromptsByHash(promptHash);
+  }
 
   // Filter out entries with empty bodies — AI can't classify without content
   const usableEntries = groundTruth.filter((gt) =>
     gt.emails.some((e) => e.body && e.body.trim() !== ''),
   );
-  console.log(`[eval] model=${model} runs=${numRuns} threads=${usableEntries.length} batch_size=${batchSize || 'all'} (${groundTruth.length - usableEntries.length} skipped: empty body)`);
+  console.log(`[eval] model=${model} runs=${numRuns} threads=${usableEntries.length} batch_size=${batchSize} prompt=${promptHash || 'bundled'} (${groundTruth.length - usableEntries.length} skipped: empty body)`);
 
   const aiOpts = { apiUrl: aiApiUrl, apiKey: hyperbolicKey };
   const allRuns = [];
@@ -38028,7 +38049,7 @@ async function runEval() {
     for (let b = 0; b < batches.length; b++) {
       const batch = batches[b];
       const allEmails = batch.flatMap((gt) => gt.emails);
-      const { systemPrompt, userPrompt } = buildPrompt(allEmails);
+      const { systemPrompt, userPrompt } = buildPrompt(allEmails, promptOverrides);
 
       const messages = [
         { role: 'system', content: systemPrompt },
@@ -38118,7 +38139,8 @@ async function runEval() {
   const result = {
     model,
     temperature,
-    batch_size: batchSize || usableEntries.length,
+    batch_size: batchSize,
+    prompt_hash: promptHash || 'bundled',
     runs: numRuns,
     successful_runs: allRuns.length,
     ground_truth_count: usableEntries.length,
