@@ -27505,7 +27505,9 @@ async function authenticate(authUrl, authSecret) {
 
 /**
  * Acquire a rate limit token before executing a query.
- * Waits until granted. If rate limiter is unavailable, proceeds (fail-open).
+ * Rate limit denials (granted: false) keep retrying indefinitely — they don't consume error budget.
+ * Only actual errors (network failures, non-429 HTTP errors) consume the error budget.
+ * Fail-open: if rate limiter is unavailable after error retries, proceed with query.
  */
 async function acquireRateLimitToken() {
   const rateLimiterUrl = coreExports.getInput('rate-limiter-url');
@@ -27513,9 +27515,17 @@ async function acquireRateLimitToken() {
 
   if (!rateLimiterUrl || !apiKey) return // No rate limiter configured — skip
 
-  const MAX_ATTEMPTS = 10;
+  const MAX_ERROR_RETRIES = 3;
+  const OVERALL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min safety valve
+  const startTime = Date.now();
+  let errorAttempts = 0;
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+  while (errorAttempts < MAX_ERROR_RETRIES) {
+    if (Date.now() - startTime > OVERALL_TIMEOUT_MS) {
+      console.log(`[sxt-client] Rate limiter: overall timeout exceeded, proceeding (fail-open)`);
+      return
+    }
+
     try {
       const resp = await fetch(`${rateLimiterUrl}/acquire`, {
         method: 'POST',
@@ -27525,9 +27535,12 @@ async function acquireRateLimitToken() {
       });
 
       if (!resp.ok && resp.status !== 429) {
-        // Non-rate-limit error — fail open, proceed with query
-        console.log(`[sxt-client] Rate limiter HTTP ${resp.status}, proceeding (fail-open)`);
-        return
+        // Non-rate-limit HTTP error — consumes error budget
+        errorAttempts++;
+        const delay = Math.min(1000 * Math.pow(2, errorAttempts), 30000);
+        console.log(`[sxt-client] Rate limiter HTTP ${resp.status}, error ${errorAttempts}/${MAX_ERROR_RETRIES}, retrying in ${delay}ms`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue
       }
 
       const result = await resp.json();
@@ -27535,19 +27548,21 @@ async function acquireRateLimitToken() {
 
       if (data.granted) return // Got token, proceed
 
-      // Rate limited — wait and retry
+      // Rate limited — wait and retry (does NOT consume error budget)
       const waitMs = data.retryAfterMs || 1000;
-      console.log(`[sxt-client] Rate limited, waiting ${waitMs}ms (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
+      console.log(`[sxt-client] Rate limited, waiting ${waitMs}ms`);
       await new Promise((r) => setTimeout(r, waitMs));
     } catch (err) {
-      // Rate limiter unreachable — fail open
-      console.log(`[sxt-client] Rate limiter error: ${err.message}, proceeding (fail-open)`);
-      return
+      // Network error — consumes error budget
+      errorAttempts++;
+      const delay = Math.min(1000 * Math.pow(2, errorAttempts), 30000);
+      console.log(`[sxt-client] Rate limiter error: ${err.message}, error ${errorAttempts}/${MAX_ERROR_RETRIES}, retrying in ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
     }
   }
 
-  // Exhausted attempts — fail open
-  console.log(`[sxt-client] Rate limiter: max attempts reached, proceeding (fail-open)`);
+  // Error budget exhausted — fail open
+  console.log(`[sxt-client] Rate limiter: error retries exhausted, proceeding (fail-open)`);
 }
 
 async function executeSql(apiUrl, jwt, biscuit, sql) {
