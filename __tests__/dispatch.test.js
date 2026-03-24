@@ -227,11 +227,11 @@ describe('dispatch command', () => {
     mockInputs()
 
     fetchSpy
-      .mockResolvedValueOnce(authResponse())
-      .mockResolvedValueOnce(sxtResponse())
-      .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }]))
-      .mockResolvedValueOnce(sxtResponse())
-      .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }]))
+      .mockResolvedValueOnce(authResponse()) // 1. auth
+      .mockResolvedValueOnce(sxtResponse()) // 2. claimFilterBatch
+      .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }])) // 3. countClaimed = 0
+      .mockResolvedValueOnce(sxtResponse()) // 4. claimClassifyBatch
+      .mockResolvedValueOnce(sxtResponse([{ CNT: 0 }])) // 5. countClaimed = 0
 
     await runDispatch()
 
