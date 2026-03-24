@@ -52,7 +52,7 @@ jobs:
   eval-a:
     name: Evaluate variant A
     runs-on: ubuntu-latest
-    environment: 0x226c2acd33ef649bff3339670b6de489880a094acf7390df6cad4b5e18a17665
+    environment: '0x226c2acd33ef649bff3339670b6de489880a094acf7390df6cad4b5e18a17665'
     outputs:
       result: ${{ steps.run-eval.outputs.result }}
       success: ${{ steps.run-eval.outputs.success }}
@@ -72,7 +72,7 @@ jobs:
   eval-b:
     name: Evaluate variant B
     runs-on: ubuntu-latest
-    environment: 0x226c2acd33ef649bff3339670b6de489880a094acf7390df6cad4b5e18a17665
+    environment: '0x226c2acd33ef649bff3339670b6de489880a094acf7390df6cad4b5e18a17665'
     outputs:
       result: ${{ steps.run-eval.outputs.result }}
       success: ${{ steps.run-eval.outputs.success }}
@@ -94,7 +94,7 @@ jobs:
     needs: [eval-a, eval-b]
     if: always() && needs.eval-a.result == 'success' && needs.eval-b.result == 'success'
     runs-on: ubuntu-latest
-    environment: 0x226c2acd33ef649bff3339670b6de489880a094acf7390df6cad4b5e18a17665
+    environment: '0x226c2acd33ef649bff3339670b6de489880a094acf7390df6cad4b5e18a17665'
     steps:
       - id: compare
         name: Compare results
