@@ -117,11 +117,11 @@ describe('create-deal-states command', () => {
     expect(sqlCalls).toHaveLength(1)
   })
 
-  it('batches inserts in chunks of 100', async () => {
+  it('batches inserts in chunks of 25', async () => {
     mockInputs()
 
-    // Generate 150 rows to test chunking
-    const diffRows = Array.from({ length: 150 }, (_, i) => ({
+    // Generate 60 rows to test chunking (60 / 25 = 3 batches: 25, 25, 10)
+    const diffRows = Array.from({ length: 60 }, (_, i) => ({
       ID: `em-${i}`,
       USER_ID: `user-${i}`,
       THREAD_ID: `thread-${i}`,
@@ -131,25 +131,26 @@ describe('create-deal-states command', () => {
     fetchSpy
       .mockResolvedValueOnce(authResponse()) // auth
       .mockResolvedValueOnce(sxtResponse(diffRows)) // diff query
-      .mockResolvedValueOnce(sxtResponse()) // insert batch 1 (100)
-      .mockResolvedValueOnce(sxtResponse()) // insert batch 2 (50)
+      .mockResolvedValueOnce(sxtResponse()) // insert batch 1 (25)
+      .mockResolvedValueOnce(sxtResponse()) // insert batch 2 (25)
+      .mockResolvedValueOnce(sxtResponse()) // insert batch 3 (10)
 
     const result = await runCreateDealStates()
 
-    expect(result).toEqual({ created_count: 150, skipped_count: 0 })
+    expect(result).toEqual({ created_count: 60, skipped_count: 0 })
 
     const sqlCalls = getSqlCalls(fetchSpy)
-    expect(sqlCalls).toHaveLength(3) // diff + 2 inserts
+    expect(sqlCalls).toHaveLength(4) // diff + 3 inserts
 
-    // Verify first insert batch has 100 rows
+    // Verify first insert batch has 25 rows
     const firstInsertSql = getSqlText(sqlCalls[1])
     expect(firstInsertSql).toContain("'em-0'")
-    expect(firstInsertSql).toContain("'em-99'")
+    expect(firstInsertSql).toContain("'em-24'")
 
-    // Verify second insert batch has 50 rows
-    const secondInsertSql = getSqlText(sqlCalls[2])
-    expect(secondInsertSql).toContain("'em-100'")
-    expect(secondInsertSql).toContain("'em-149'")
+    // Verify third insert batch has 10 rows
+    const thirdInsertSql = getSqlText(sqlCalls[3])
+    expect(thirdInsertSql).toContain("'em-50'")
+    expect(thirdInsertSql).toContain("'em-59'")
   })
 
   it('rejects invalid schema', async () => {

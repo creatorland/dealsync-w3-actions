@@ -27805,37 +27805,46 @@ async function runDispatchDealStates() {
     const offset = i * batchSize;
     const limit = batchSize;
 
-    const payload = {
-      jsonrpc: '2.0',
-      method: 'w3_triggerWorkflow',
-      params: {
-        workflowName: creatorName,
-        body: { offset: String(offset), limit: String(limit) },
-      },
-      id: i + 1,
-    };
+    const inputs = { offset: String(offset), limit: String(limit) };
+    const triggerUrl = `${w3RpcUrl}/workflow/${encodeURIComponent(creatorName)}/trigger`;
+    const MAX_TRIGGER_RETRIES = 3;
 
-    try {
-      const resp = await fetch(w3RpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
-      const result = await resp.json();
-      const triggerHash = result.result?.triggerHash || result.triggerHash || '';
+    let triggered = false;
+    for (let attempt = 0; attempt <= MAX_TRIGGER_RETRIES; attempt++) {
+      try {
+        const resp = await fetch(triggerUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inputs }),
+        });
+        if (resp.status === 429) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+          console.warn(
+            `[dispatch-deal-states] Worker ${i + 1}/${numWorkers} hit 429 (attempt ${attempt + 1}/${MAX_TRIGGER_RETRIES + 1}), retrying in ${delay}ms`,
+          );
+          await sleep(delay);
+          continue
+        }
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
+        const result = await resp.json();
+        const triggerHash = result.triggerHash || '';
 
-      workersTriggered++;
-      console.log(
-        `[dispatch-deal-states] Worker ${i + 1}/${numWorkers}: offset=${offset} limit=${limit} trigger=${triggerHash.substring(0, 16)}`,
-      );
-    } catch (err) {
-      console.warn(
-        `[dispatch-deal-states] Worker ${i + 1}/${numWorkers} trigger failed: ${err.message}`,
-      );
+        workersTriggered++;
+        triggered = true;
+        console.log(
+          `[dispatch-deal-states] Worker ${i + 1}/${numWorkers}: offset=${offset} limit=${limit} trigger=${triggerHash.substring(0, 16)}`,
+        );
+        break
+      } catch (err) {
+        // Only retry on network errors, not HTTP errors (those are already handled above)
+        console.warn(
+          `[dispatch-deal-states] Worker ${i + 1}/${numWorkers} trigger failed: ${err.message}`,
+        );
+        break
+      }
     }
 
-    if (i < numWorkers - 1) {
+    if (triggered && i < numWorkers - 1) {
       await sleep(100);
     }
   }

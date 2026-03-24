@@ -45,7 +45,7 @@ function authResponse() {
 }
 
 function triggerSuccess(hash = 'w3-hash-abc123') {
-  return new Response(JSON.stringify({ result: { triggerHash: hash } }), {
+  return new Response(JSON.stringify({ triggerHash: hash }), {
     status: 200,
     headers: { 'content-type': 'application/json' },
   })
@@ -63,13 +63,13 @@ function getSqlText(call) {
   return JSON.parse(call[1].body).sqlText
 }
 
-function getRpcCalls(fetchSpy) {
+function getTriggerCalls(fetchSpy) {
   return fetchSpy.mock.calls.filter(
-    (c) => c[0].includes('/rpc') && !c[0].includes('/v1/sql'),
+    (c) => typeof c[0] === 'string' && c[0].includes('/workflow/') && c[0].includes('/trigger'),
   )
 }
 
-function getRpcPayload(call) {
+function getTriggerPayload(call) {
   return JSON.parse(call[1].body)
 }
 
@@ -110,26 +110,21 @@ describe('dispatch-deal-states command', () => {
     expect(countSql).toContain('NOT IN (SELECT EMAIL_METADATA_ID FROM')
 
     // Verify 3 W3 RPC calls with correct offsets
-    const rpcCalls = getRpcCalls(fetchSpy)
+    const rpcCalls = getTriggerCalls(fetchSpy)
     expect(rpcCalls).toHaveLength(3)
 
-    const payload0 = getRpcPayload(rpcCalls[0])
-    expect(payload0.jsonrpc).toBe('2.0')
-    expect(payload0.method).toBe('w3_triggerWorkflow')
-    expect(payload0.params.workflowName).toBe('DealStateWorker')
-    expect(payload0.params.body.offset).toBe('0')
-    expect(payload0.params.body.limit).toBe('500')
-    expect(payload0.id).toBe(1)
+    const payload0 = getTriggerPayload(rpcCalls[0])
+    expect(payload0.inputs.offset).toBe('0')
+    expect(payload0.inputs.limit).toBe('500')
 
-    const payload1 = getRpcPayload(rpcCalls[1])
-    expect(payload1.params.body.offset).toBe('500')
-    expect(payload1.params.body.limit).toBe('500')
-    expect(payload1.id).toBe(2)
+    const payload1 = getTriggerPayload(rpcCalls[1])
+    expect(payload1.inputs.offset).toBe('500')
+    expect(payload1.inputs.limit).toBe('500')
 
-    const payload2 = getRpcPayload(rpcCalls[2])
-    expect(payload2.params.body.offset).toBe('1000')
-    expect(payload2.params.body.limit).toBe('500')
-    expect(payload2.id).toBe(3)
+    const payload2 = getTriggerPayload(rpcCalls[2])
+    expect(payload2.inputs.offset).toBe('1000')
+    expect(payload2.inputs.limit).toBe('500')
+    expect(payload2.inputs.limit).toBe('500')
   })
 
   it('caps at max-emails: 8000 diff with max=1000 → 2 workers', async () => {
@@ -149,14 +144,14 @@ describe('dispatch-deal-states command', () => {
     expect(result.workers_triggered).toBe(2)
     expect(result.total_emails).toBe(1000)
 
-    const rpcCalls = getRpcCalls(fetchSpy)
+    const rpcCalls = getTriggerCalls(fetchSpy)
     expect(rpcCalls).toHaveLength(2)
 
-    const payload0 = getRpcPayload(rpcCalls[0])
-    expect(payload0.params.body.offset).toBe('0')
+    const payload0 = getTriggerPayload(rpcCalls[0])
+    expect(payload0.inputs.offset).toBe('0')
 
-    const payload1 = getRpcPayload(rpcCalls[1])
-    expect(payload1.params.body.offset).toBe('500')
+    const payload1 = getTriggerPayload(rpcCalls[1])
+    expect(payload1.inputs.offset).toBe('500')
   })
 
   it('returns 0 workers when diff is 0, no trigger calls', async () => {
@@ -171,7 +166,7 @@ describe('dispatch-deal-states command', () => {
     expect(result.workers_triggered).toBe(0)
     expect(result.total_emails).toBe(0)
 
-    const rpcCalls = getRpcCalls(fetchSpy)
+    const rpcCalls = getTriggerCalls(fetchSpy)
     expect(rpcCalls).toHaveLength(0)
   })
 
@@ -185,23 +180,17 @@ describe('dispatch-deal-states command', () => {
 
     await runDispatchDealStates()
 
-    const rpcCalls = getRpcCalls(fetchSpy)
+    const rpcCalls = getTriggerCalls(fetchSpy)
     expect(rpcCalls).toHaveLength(1)
 
     const call = rpcCalls[0]
-    expect(call[0]).toBe('https://w3.example.com/rpc')
+    expect(call[0]).toBe('https://w3.example.com/rpc/workflow/DealStateWorker/trigger')
     expect(call[1].method).toBe('POST')
     expect(call[1].headers['Content-Type']).toBe('application/json')
 
-    const payload = getRpcPayload(call)
+    const payload = getTriggerPayload(call)
     expect(payload).toEqual({
-      jsonrpc: '2.0',
-      method: 'w3_triggerWorkflow',
-      params: {
-        workflowName: 'DealStateWorker',
-        body: { offset: '0', limit: '500' },
-      },
-      id: 1,
+      inputs: { offset: '0', limit: '500' },
     })
   })
 
@@ -222,7 +211,7 @@ describe('dispatch-deal-states command', () => {
     expect(result.total_emails).toBe(1500)
 
     // All 3 triggers were attempted
-    const rpcCalls = getRpcCalls(fetchSpy)
+    const rpcCalls = getTriggerCalls(fetchSpy)
     expect(rpcCalls).toHaveLength(3)
   })
 
