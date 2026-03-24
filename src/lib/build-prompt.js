@@ -49,12 +49,11 @@ function buildThreadData(emails) {
 export function buildPrompt(emails) {
   const threadData = buildThreadData(emails)
 
-  // System prompt is the short persona
+  // System prompt contains all static instructions + examples (prefix-cacheable)
   const systemPrompt = systemTemplate.trim()
 
-  // User prompt is the full classifier instructions with thread data injected
+  // User prompt is minimal: framing + thread data (all instructions are in system prompt for prefix caching)
   const userPrompt = classificationInstructions
-    .replace('{{CLASSIFICATION_INSTRUCTIONS}}', '')
     .replace('{{THREAD_DATA}}', threadData)
     .trim()
 

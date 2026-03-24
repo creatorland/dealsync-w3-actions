@@ -14,7 +14,7 @@ jest.unstable_mockModule('../prompts/system.md', () => ({
 
 jest.unstable_mockModule('../prompts/user.md', () => ({
   default:
-    'Classify each thread.\n\n{{CLASSIFICATION_INSTRUCTIONS}}\n\n# Threads to Classify\n\n{{THREAD_DATA}}',
+    'Classify the email threads below. Return one JSON object per thread in a JSON array.\n\n# Threads to Classify\n\n{{THREAD_DATA}}',
 }))
 
 const { buildPrompt } = await import('../src/lib/build-prompt.js')
@@ -78,12 +78,12 @@ describe('buildPrompt', () => {
     expect(userPrompt).toContain('Previous AI Summary: Prior eval: brand deal in progress.')
   })
 
-  it('classification instructions placeholder is replaced', () => {
+  it('thread data placeholder is replaced', () => {
     const emails = [makeEmail()]
     const { userPrompt } = buildPrompt(emails)
 
-    expect(userPrompt).not.toContain('{{CLASSIFICATION_INSTRUCTIONS}}')
     expect(userPrompt).not.toContain('{{THREAD_DATA}}')
+    expect(userPrompt).toContain('Classify the email threads below')
   })
 
   it('system prompt is the persona template', () => {
