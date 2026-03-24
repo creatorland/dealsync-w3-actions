@@ -89,7 +89,7 @@ describe('dealsync main (command router)', () => {
   it('sets success=false when command throws', async () => {
     core.getInput.mockImplementation((name) => (name === 'command' ? 'fetch-and-classify' : ''))
 
-    await run()
+    await expect(run()).rejects.toThrow('fetch-and-classify not mocked')
 
     expect(outputs['success']).toBe('false')
     expect(core.setFailed).toHaveBeenCalledWith('fetch-and-classify not mocked')
