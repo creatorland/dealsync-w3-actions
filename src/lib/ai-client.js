@@ -22,8 +22,11 @@ export const VALID_DEAL_TYPES = new Set([
  * @param {Array} messages - Chat messages
  * @param {Object} opts - { temperature, apiUrl, apiKey }
  */
+const MAX_RATE_LIMIT_WAITS = 10
+
 export async function callModel(model, messages, { temperature = 0, apiUrl, apiKey } = {}) {
   let lastError
+  let rateLimitWaits = 0
   for (let attempt = 1; attempt <= MAX_HTTP_RETRIES; attempt++) {
     try {
       console.log(`[ai-client] ${model} (attempt ${attempt}/${MAX_HTTP_RETRIES})`)
@@ -47,6 +50,17 @@ export async function callModel(model, messages, { temperature = 0, apiUrl, apiK
         const errBody = await resp.text().catch(() => '')
         lastError = new Error(`HTTP ${resp.status}: ${errBody.substring(0, 200)}`)
         console.log(`[ai-client] ${model} HTTP ${resp.status}: ${errBody.substring(0, 200)}`)
+
+        // 429: respect Retry-After or wait 5s, don't consume retry budget
+        if (resp.status === 429 && rateLimitWaits < MAX_RATE_LIMIT_WAITS) {
+          rateLimitWaits++
+          const retryAfter = parseInt(resp.headers.get('retry-after') || '5', 10) * 1000
+          console.log(`[ai-client] ${model} rate limited (${rateLimitWaits}/${MAX_RATE_LIMIT_WAITS}), waiting ${retryAfter}ms`)
+          await new Promise((r) => setTimeout(r, retryAfter))
+          attempt-- // don't consume attempt
+          continue
+        }
+
         if (attempt < MAX_HTTP_RETRIES) {
           const delay = AI_RETRY_DELAY_MS * Math.pow(AI_BACKOFF_MULTIPLIER, attempt - 1)
           await new Promise((r) => setTimeout(r, delay))
