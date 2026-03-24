@@ -34,7 +34,7 @@ export async function runEval() {
   const numRuns = parseInt(core.getInput('runs') || '10', 10)
   const temperature = parseFloat(core.getInput('temperature') || '0')
   const batchSize = parseInt(core.getInput('batch-size') || '1', 10)
-  const concurrency = parseInt(core.getInput('concurrency') || '50', 10)
+  const concurrency = parseInt(core.getInput('concurrency') || '10', 10)
   const promptHash = core.getInput('prompt-hash') || ''
 
   if (!hyperbolicKey) throw new Error('hyperbolic-key is required for eval')
