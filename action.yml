@@ -79,6 +79,8 @@ inputs:
   temperature:
     description: 'AI temperature (eval)'
     default: '0'
+  prompt-hash:
+    description: 'Git commit hash to fetch prompts from (eval). Empty = use bundled prompts'
   result-a:
     description: 'JSON result from eval variant A (eval-compare)'
   result-b:
