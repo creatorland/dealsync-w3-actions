@@ -35529,7 +35529,8 @@ async function run() {
     coreExports.setOutput('error', error.message);
     coreExports.setOutput('error_stack', error.stack || '');
     coreExports.setFailed(error.message);
+    throw error
   }
 }
 
-run();
+run().catch(() => process.exit(1));

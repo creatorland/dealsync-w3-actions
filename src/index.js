@@ -1,2 +1,2 @@
 import { run } from './main.js'
-run()
+run().catch(() => process.exit(1))
