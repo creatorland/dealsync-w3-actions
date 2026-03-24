@@ -59,7 +59,7 @@ jobs:
     steps:
       - id: run-eval
         name: Run eval A
-        uses: creatorland/dealsync-action@fbbe4c468b61bcbd1836ae1a0ae57a09ea134888
+        uses: creatorland/dealsync-action@13986e94f200fc1b57ee6555b810788234027144
         with:
           command: eval
           hyperbolic-key: ${{ secrets.HYPERBOLIC_KEY }}
@@ -79,7 +79,7 @@ jobs:
     steps:
       - id: run-eval
         name: Run eval B
-        uses: creatorland/dealsync-action@fbbe4c468b61bcbd1836ae1a0ae57a09ea134888
+        uses: creatorland/dealsync-action@13986e94f200fc1b57ee6555b810788234027144
         with:
           command: eval
           hyperbolic-key: ${{ secrets.HYPERBOLIC_KEY }}
@@ -98,7 +98,7 @@ jobs:
     steps:
       - id: compare
         name: Compare results
-        uses: creatorland/dealsync-action@fbbe4c468b61bcbd1836ae1a0ae57a09ea134888
+        uses: creatorland/dealsync-action@13986e94f200fc1b57ee6555b810788234027144
         with:
           command: eval-compare
           result-a: ${{ needs.eval-a.outputs.result }}
