@@ -27583,17 +27583,24 @@ LIMIT ${limit} OFFSET ${offset}`;
     const values = chunk
       .map((em) => {
         const id = crypto.randomUUID();
-        return `('${id}', '${em.ID}', '${em.USER_ID}', '${em.THREAD_ID}', '${em.MESSAGE_ID}', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        const threadId = em.THREAD_ID || '';
+        const messageId = em.MESSAGE_ID || '';
+        return `('${id}', '${em.ID}', '${em.USER_ID}', '${threadId}', '${messageId}', 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
       })
-      .join(',\n');
+      .join(', ');
 
-    const insertSql = `INSERT INTO ${schema}.DEAL_STATES (ID, EMAIL_METADATA_ID, USER_ID, THREAD_ID, MESSAGE_ID, STATUS, CREATED_AT, UPDATED_AT)
-VALUES ${values}
-ON CONFLICT (EMAIL_METADATA_ID) DO NOTHING`;
+    const insertSql = `INSERT INTO ${schema}.DEAL_STATES (ID, EMAIL_METADATA_ID, USER_ID, THREAD_ID, MESSAGE_ID, STATUS, CREATED_AT, UPDATED_AT) VALUES ${values} ON CONFLICT (EMAIL_METADATA_ID) DO NOTHING`;
 
-    await executeSql(apiUrl, jwt, biscuit, insertSql);
-    createdCount += chunk.length;
-    console.log(`[create-deal-states] inserted batch ${Math.floor(i / BATCH_SIZE) + 1} (${chunk.length} rows)`);
+    try {
+      await executeSql(apiUrl, jwt, biscuit, insertSql);
+      createdCount += chunk.length;
+      console.log(`[create-deal-states] inserted batch ${Math.floor(i / BATCH_SIZE) + 1} (${chunk.length} rows)`);
+    } catch (err) {
+      // Log the first failing SQL for debugging, then re-throw
+      console.error(`[create-deal-states] batch ${Math.floor(i / BATCH_SIZE) + 1} failed. SQL length=${insertSql.length}, rows=${chunk.length}`);
+      console.error(`[create-deal-states] first row ID: ${chunk[0]?.ID}, error: ${err.message.substring(0, 200)}`);
+      throw err
+    }
   }
 
   console.log(`[create-deal-states] done: created=${createdCount}`);
