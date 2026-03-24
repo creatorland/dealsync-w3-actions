@@ -8,7 +8,7 @@ jobs:
     steps:
       - id: retrigger-stuck
         name: Retrigger stuck batches
-        uses: creatorland/dealsync-action@8776bb6
+        uses: creatorland/dealsync-action@8776bb64aa49f3f7c22197cc2eb0bcd0dd4214c5
         with:
           command: retrigger-stuck
           auth-url: ${{ secrets.SXT_AUTH_URL }}
@@ -23,7 +23,7 @@ jobs:
 
       - id: dispatch-deal-state-sync
         name: Create missing deal states
-        uses: creatorland/dealsync-action@8776bb6
+        uses: creatorland/dealsync-action@8776bb64aa49f3f7c22197cc2eb0bcd0dd4214c5
         with:
           command: dispatch-deal-state-sync
           auth-url: ${{ secrets.SXT_AUTH_URL }}
@@ -40,7 +40,7 @@ jobs:
 
       - id: dispatch
         name: Dispatch new batches
-        uses: creatorland/dealsync-action@8776bb6
+        uses: creatorland/dealsync-action@8776bb64aa49f3f7c22197cc2eb0bcd0dd4214c5
         with:
           command: dispatch
           auth-url: ${{ secrets.SXT_AUTH_URL }}

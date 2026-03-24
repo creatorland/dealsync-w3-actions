@@ -15,7 +15,7 @@ jobs:
     steps:
       - id: run-filter
         name: Fetch headers and apply filter rules
-        uses: creatorland/dealsync-action@8776bb6
+        uses: creatorland/dealsync-action@8776bb64aa49f3f7c22197cc2eb0bcd0dd4214c5
         with:
           command: fetch-and-filter
           batch-id: ${{ inputs.filter_batch_id }}
@@ -31,7 +31,7 @@ jobs:
       - id: save-passed
         name: Save passed emails
         if: ${{ steps.run-filter.outputs.success == 'true' && fromJSON(steps.run-filter.outputs.result).filtered_ids != '' }}
-        uses: creatorland/dealsync-action@8776bb6
+        uses: creatorland/dealsync-action@8776bb64aa49f3f7c22197cc2eb0bcd0dd4214c5
         with:
           command: sxt-execute
           auth-url: ${{ secrets.SXT_AUTH_URL }}
@@ -46,7 +46,7 @@ jobs:
       - id: save-rejected
         name: Save rejected emails
         if: ${{ steps.run-filter.outputs.success == 'true' && fromJSON(steps.run-filter.outputs.result).rejected_ids != '' }}
-        uses: creatorland/dealsync-action@8776bb6
+        uses: creatorland/dealsync-action@8776bb64aa49f3f7c22197cc2eb0bcd0dd4214c5
         with:
           command: sxt-execute
           auth-url: ${{ secrets.SXT_AUTH_URL }}
@@ -65,7 +65,7 @@ jobs:
     steps:
       - id: run-classify
         name: Fetch content, classify with AI, save audit
-        uses: creatorland/dealsync-action@8776bb6
+        uses: creatorland/dealsync-action@8776bb64aa49f3f7c22197cc2eb0bcd0dd4214c5
         with:
           command: fetch-and-classify
           batch-id: ${{ inputs.classify_batch_id }}
@@ -84,7 +84,7 @@ jobs:
       - id: save-evals
         name: Save thread evaluations
         if: ${{ steps.run-classify.outputs.success == 'true' }}
-        uses: creatorland/dealsync-action@8776bb6
+        uses: creatorland/dealsync-action@8776bb64aa49f3f7c22197cc2eb0bcd0dd4214c5
         with:
           command: save-evals
           batch-id: ${{ inputs.classify_batch_id }}
@@ -99,7 +99,7 @@ jobs:
       - id: save-deals
         name: Save deals and contacts
         if: ${{ steps.save-evals.outputs.success == 'true' }}
-        uses: creatorland/dealsync-action@8776bb6
+        uses: creatorland/dealsync-action@8776bb64aa49f3f7c22197cc2eb0bcd0dd4214c5
         with:
           command: save-deals
           batch-id: ${{ inputs.classify_batch_id }}
@@ -114,7 +114,7 @@ jobs:
       - id: update-states
         name: Update deal states
         if: ${{ steps.save-deals.outputs.success == 'true' }}
-        uses: creatorland/dealsync-action@8776bb6
+        uses: creatorland/dealsync-action@8776bb64aa49f3f7c22197cc2eb0bcd0dd4214c5
         with:
           command: update-deal-states
           batch-id: ${{ inputs.classify_batch_id }}

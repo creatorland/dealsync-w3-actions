@@ -22,11 +22,11 @@ on:
       hash_a:
         type: string
         description: Prompt commit hash for variant A (baseline)
-        default: '4274af0'
+        default: '4274af00b52049c49e7a7b1b577b71ea95a375d3'
       hash_b:
         type: string
         description: Prompt commit hash for variant B (candidate)
-        default: '57e99ad'
+        default: '57e99add6f2e4c1983607aa37d2c5e7319023792'
       model_a:
         type: string
         description: Model for variant A
@@ -59,7 +59,7 @@ jobs:
     steps:
       - id: run-eval
         name: Run eval A
-        uses: creatorland/dealsync-action@90abc06
+        uses: creatorland/dealsync-action@90abc06fbb38c83b539c4ba7b2055d06be7cfe5c
         with:
           command: eval
           hyperbolic-key: ${{ secrets.HYPERBOLIC_KEY }}
@@ -79,7 +79,7 @@ jobs:
     steps:
       - id: run-eval
         name: Run eval B
-        uses: creatorland/dealsync-action@90abc06
+        uses: creatorland/dealsync-action@90abc06fbb38c83b539c4ba7b2055d06be7cfe5c
         with:
           command: eval
           hyperbolic-key: ${{ secrets.HYPERBOLIC_KEY }}
@@ -98,7 +98,7 @@ jobs:
     steps:
       - id: compare
         name: Compare results
-        uses: creatorland/dealsync-action@90abc06
+        uses: creatorland/dealsync-action@90abc06fbb38c83b539c4ba7b2055d06be7cfe5c
         with:
           command: eval-compare
           result-a: ${{ needs.eval-a.outputs.result }}
