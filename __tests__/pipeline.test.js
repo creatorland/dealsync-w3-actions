@@ -207,11 +207,8 @@ describe('runPool', () => {
 
     const results = await runPool(claimFn, workerFn, { maxConcurrent: 1, maxRetries: 3 })
 
-    // When attempts starts at maxRetries, the while loop condition is false immediately
-    // so workerFn is never called, and the batch is neither processed nor failed
-    // Actually, looking at the spec: the while loop body never executes, so no increment
-    // The worker resolves without processing or failing - this is essentially a no-op
     expect(workerFn).not.toHaveBeenCalled()
+    expect(results).toEqual({ processed: 0, failed: 1 })
   })
 })
 
