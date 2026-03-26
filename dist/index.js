@@ -27445,60 +27445,91 @@ function sanitizeSchema(schema) {
 }
 
 /**
- * Shared SxT helpers for all commands.
- * Auth via proxy, static biscuit from input.
- * Rate limiter integration: acquires token before each SQL call.
+ * SxT client for dealsync-action.
  *
- * All fetch calls have a 2-minute timeout by default.
+ * Flow:
+ *   acquireRateLimitToken() → wait until granted (no max, fail-open on errors)
+ *   authenticate() → get cached token from sxt/auth (retry with backoff)
+ *   executeSql() → call SxT API (retry with backoff)
+ *   401? → authenticate(badJwt) with backoff → retry
+ *   max retry? → fail
+ *
+ * Every path has exponential backoff.
  */
 
 
-const DEFAULT_TIMEOUT_MS = 120000; // 2 minutes
+const SQL_TIMEOUT_MS = 120000;
+const AUTH_TIMEOUT_MS = 30000;
+const MAX_RETRIES = 3;
 
-function withTimeout(ms = DEFAULT_TIMEOUT_MS) {
+let cachedJwt = null;
+
+function sleep$1(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+function backoff(attempt, base = 2000, max = 10000) {
+  return Math.min(base * Math.pow(2, attempt), max)
+}
+
+function withTimeout(ms = SQL_TIMEOUT_MS) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ms);
   return { signal: controller.signal, clear: () => clearTimeout(timeout) }
 }
 
+/**
+ * Get token from sxt/auth with retry + backoff.
+ * If badToken provided, backend refreshes.
+ */
 async function authenticate(authUrl, authSecret, badToken) {
-  const { signal, clear } = withTimeout();
-  try {
-    const headers = { 'x-shared-secret': authSecret };
-    if (badToken) headers['x-bad-token'] = badToken;
-    const resp = await fetch(authUrl, {
-      method: 'GET',
-      headers,
-      signal,
-    });
-    if (!resp.ok) throw new Error(`Auth failed: ${resp.status}`)
-    const data = await resp.json();
-    return data.data || data.accessToken || data
-  } finally {
-    clear();
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const headers = { 'x-shared-secret': authSecret };
+      if (badToken) headers['x-bad-token'] = badToken;
+      const { signal, clear } = withTimeout(AUTH_TIMEOUT_MS);
+      try {
+        const resp = await fetch(authUrl, { method: 'GET', headers, signal });
+        if (!resp.ok) throw new Error(`Auth failed: ${resp.status}`)
+        const data = await resp.json();
+        const jwt = data.data || data.accessToken;
+        if (!jwt) throw new Error('Auth returned no token')
+        cachedJwt = jwt;
+        return jwt
+      } finally {
+        clear();
+      }
+    } catch (err) {
+      if (attempt < MAX_RETRIES - 1) {
+        const delay = backoff(attempt);
+        console.log(`[sxt-client] Auth failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${err.message}, retrying in ${delay}ms`);
+        await sleep$1(delay);
+      } else {
+        throw err
+      }
+    }
   }
+  throw new Error('Auth failed after all retries')
 }
 
 /**
- * Acquire a rate limit token before executing a query.
- * Rate limit denials (granted: false) keep retrying indefinitely — they don't consume error budget.
- * Only actual errors (network failures, non-429 HTTP errors) consume the error budget.
- * Fail-open: if rate limiter is unavailable after error retries, proceed with query.
+ * Acquire rate limit token. Waits until granted (no max).
+ * Only network errors consume budget (3 max, then fail-open).
  */
 async function acquireRateLimitToken() {
   const rateLimiterUrl = coreExports.getInput('rate-limiter-url');
   const apiKey = coreExports.getInput('rate-limiter-api-key');
 
-  if (!rateLimiterUrl || !apiKey) return // No rate limiter configured — skip
+  if (!rateLimiterUrl || !apiKey) return
 
-  const MAX_ERROR_RETRIES = 3;
-  const OVERALL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min safety valve
+  const MAX_ERRORS = 3;
+  const OVERALL_TIMEOUT_MS = 5 * 60 * 1000;
   const startTime = Date.now();
-  let errorAttempts = 0;
+  let errors = 0;
 
-  while (errorAttempts < MAX_ERROR_RETRIES) {
+  while (errors < MAX_ERRORS) {
     if (Date.now() - startTime > OVERALL_TIMEOUT_MS) {
-      console.log(`[sxt-client] Rate limiter: overall timeout exceeded, proceeding (fail-open)`);
+      console.log('[sxt-client] Rate limiter: overall timeout, proceeding (fail-open)');
       return
     }
 
@@ -27507,91 +27538,90 @@ async function acquireRateLimitToken() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey, tokens: 1, source: 'dealsync-action' }),
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
       });
 
       if (!resp.ok && resp.status !== 429) {
-        // Non-rate-limit HTTP error — consumes error budget
-        errorAttempts++;
-        const delay = Math.min(1000 * Math.pow(2, errorAttempts), 30000);
-        console.log(
-          `[sxt-client] Rate limiter HTTP ${resp.status}, error ${errorAttempts}/${MAX_ERROR_RETRIES}, retrying in ${delay}ms`,
-        );
-        await new Promise((r) => setTimeout(r, delay));
+        errors++;
+        const delay = backoff(errors);
+        console.log(`[sxt-client] Rate limiter HTTP ${resp.status}, error ${errors}/${MAX_ERRORS}, retrying in ${delay}ms`);
+        await sleep$1(delay);
         continue
       }
 
       const result = await resp.json();
       const data = result.data || result;
+      if (data.granted) return
 
-      if (data.granted) return // Got token, proceed
-
-      // Rate limited — wait and retry (does NOT consume error budget)
       const waitMs = data.retryAfterMs || 1000;
       console.log(`[sxt-client] Rate limited, waiting ${waitMs}ms`);
-      await new Promise((r) => setTimeout(r, waitMs));
+      await sleep$1(waitMs);
     } catch (err) {
-      // Network error — consumes error budget
-      errorAttempts++;
-      const delay = Math.min(1000 * Math.pow(2, errorAttempts), 30000);
-      console.log(
-        `[sxt-client] Rate limiter error: ${err.message}, error ${errorAttempts}/${MAX_ERROR_RETRIES}, retrying in ${delay}ms`,
-      );
-      await new Promise((r) => setTimeout(r, delay));
+      errors++;
+      const delay = backoff(errors);
+      console.log(`[sxt-client] Rate limiter error: ${err.message}, error ${errors}/${MAX_ERRORS}, retrying in ${delay}ms`);
+      await sleep$1(delay);
     }
   }
 
-  // Error budget exhausted — fail open
-  console.log(`[sxt-client] Rate limiter: error retries exhausted, proceeding (fail-open)`);
+  console.log('[sxt-client] Rate limiter: error budget exhausted, proceeding (fail-open)');
 }
 
+/**
+ * Execute SQL against SxT. Every path retries with backoff.
+ *
+ * 1. Acquire rate limit token (waits, fail-open)
+ * 2. Call SQL with cached JWT (retry with backoff on network error)
+ * 3. On 401 → authenticate(badJwt) with backoff → retry
+ * 4. Max retries → fail
+ */
 async function executeSql(apiUrl, jwt, biscuit, sql) {
-  // Acquire rate limit token before query (fail-open if unavailable)
   await acquireRateLimitToken();
 
-  const { signal, clear } = withTimeout();
-  try {
-    const resp = await fetch(`${apiUrl}/v1/sql`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${jwt}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ sqlText: sql, biscuits: [biscuit] }),
-      signal,
-    });
+  let currentJwt = jwt || cachedJwt;
+  if (!currentJwt) throw new Error('No JWT available — call authenticate() first')
 
-    // On 401, re-authenticate with X-Bad-Token and retry once
-    if (resp.status === 401) {
-      console.log('[sxt-client] 401 received, re-authenticating with X-Bad-Token');
-      const authUrl = coreExports.getInput('auth-url');
-      const authSecret = coreExports.getInput('auth-secret');
-      const newJwt = await authenticate(authUrl, authSecret, jwt);
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const { signal, clear } = withTimeout();
+    try {
+      const resp = await fetch(`${apiUrl}/v1/sql`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${currentJwt}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sqlText: sql, biscuits: [biscuit] }),
+        signal,
+      });
 
-      await acquireRateLimitToken();
-      const { signal: retrySignal, clear: retryClear } = withTimeout();
-      try {
-        const retryResp = await fetch(`${apiUrl}/v1/sql`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${newJwt}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ sqlText: sql, biscuits: [biscuit] }),
-          signal: retrySignal,
-        });
-        if (!retryResp.ok) throw new Error(`SxT ${retryResp.status}: ${await retryResp.text()}`)
-        return retryResp.json()
-      } finally {
-        retryClear();
+      if (resp.status === 401) {
+        clear();
+        const delay = backoff(attempt);
+        console.log(`[sxt-client] 401 received (attempt ${attempt + 1}/${MAX_RETRIES}), re-authenticating, backoff ${delay}ms`);
+        const authUrl = coreExports.getInput('auth-url');
+        const authSecret = coreExports.getInput('auth-secret');
+        currentJwt = await authenticate(authUrl, authSecret, currentJwt);
+        await sleep$1(delay);
+        continue
+      }
+
+      if (!resp.ok) throw new Error(`SxT ${resp.status}: ${await resp.text()}`)
+      return resp.json()
+    } catch (err) {
+      clear();
+      if (err.message.startsWith('SxT ')) throw err // Non-retryable SxT error
+
+      if (attempt < MAX_RETRIES - 1) {
+        const delay = backoff(attempt);
+        console.log(`[sxt-client] SQL query failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${err.message}, retrying in ${delay}ms`);
+        await sleep$1(delay);
+      } else {
+        throw err
       }
     }
-
-    if (!resp.ok) throw new Error(`SxT ${resp.status}: ${await resp.text()}`)
-    return resp.json()
-  } finally {
-    clear();
   }
+
+  throw new Error('SxT query failed after all retries')
 }
 
 /**
@@ -34298,10 +34328,10 @@ function buildPrompt(emails, { systemOverride, userOverride } = {}) {
 }
 
 // --- Constants ---
-const AI_REQUEST_TIMEOUT_MS = 120000;
-const AI_RETRY_DELAY_MS = 1000;
+const AI_REQUEST_TIMEOUT_MS = 240000;
+const AI_RETRY_DELAY_MS = 2000;
 const AI_BACKOFF_MULTIPLIER = 2;
-const MAX_HTTP_RETRIES = 2;
+const MAX_HTTP_RETRIES = 3;
 const MAX_TOKENS = 20480;
 
 // --- Valid categories and deal types for validation ---
@@ -34930,9 +34960,7 @@ async function runFetchAndFilter() {
 
   if (!batchId) throw new Error('batch-id is required')
 
-  console.log(
-    `[fetch-and-filter] starting for batch ${batchId} (chunk=${chunkSize}, timeout=${fetchTimeoutMs}ms)`,
-  );
+  console.log(`[fetch-and-filter] starting for batch ${batchId} (chunk=${chunkSize}, timeout=${fetchTimeoutMs}ms)`);
 
   // 1. Authenticate + fetch metadata from SxT
   const jwt = await authenticate(authUrl, authSecret);
@@ -34959,37 +34987,48 @@ async function runFetchAndFilter() {
   const allEmails = [];
   const metaByMessageId = new Map(metadataRows.map((r) => [r.MESSAGE_ID, r]));
 
+  const MAX_RETRIES = 3;
   for (let i = 0; i < messageIds.length; i += chunkSize) {
     const chunk = messageIds.slice(i, i + chunkSize);
-    try {
-      const { signal, clear } = withTimeout(fetchTimeoutMs);
-      const resp = await fetch(`${contentFetcherUrl}/email-content/fetch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          ...(syncStateId ? { syncStateId } : {}),
-          messageIds: chunk,
-          format: 'metadata',
-        }),
-        signal,
-      });
-      clear();
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
-      const result = await resp.json();
-      const emails = result.data || result;
+    const chunkNum = Math.floor(i / chunkSize) + 1;
+    let fetched = false;
 
-      for (const email of emails) {
-        const meta = metaByMessageId.get(email.messageId);
-        if (meta) {
-          email.id = meta.EMAIL_METADATA_ID;
+    for (let attempt = 0; attempt < MAX_RETRIES && !fetched; attempt++) {
+      try {
+        const { signal, clear } = withTimeout(fetchTimeoutMs);
+        const resp = await fetch(`${contentFetcherUrl}/email-content/fetch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            ...(syncStateId ? { syncStateId } : {}),
+            messageIds: chunk,
+            format: 'metadata',
+          }),
+          signal,
+        });
+        clear();
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
+        const result = await resp.json();
+        const emails = result.data || result;
+
+        for (const email of emails) {
+          const meta = metaByMessageId.get(email.messageId);
+          if (meta) {
+            email.id = meta.EMAIL_METADATA_ID;
+          }
+          allEmails.push(email);
         }
-        allEmails.push(email);
+        fetched = true;
+      } catch (err) {
+        if (attempt < MAX_RETRIES - 1) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+          console.log(`[fetch-and-filter] chunk ${chunkNum} failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${err.message}, retrying in ${delay}ms`);
+          await new Promise((r) => setTimeout(r, delay));
+        } else {
+          console.log(`[fetch-and-filter] chunk ${chunkNum} failed after ${MAX_RETRIES} attempts: ${err.message}`);
+        }
       }
-    } catch (err) {
-      console.log(
-        `[fetch-and-filter] content fetch failed for chunk ${Math.floor(i / chunkSize) + 1}: ${err.message}`,
-      );
     }
   }
 
