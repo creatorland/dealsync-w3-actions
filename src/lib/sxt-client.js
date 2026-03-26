@@ -24,7 +24,9 @@ function sleep(ms) {
 }
 
 function backoff(attempt, base = 2000, max = 10000) {
-  return Math.min(base * Math.pow(2, attempt), max)
+  const delay = Math.min(base * Math.pow(2, attempt), max)
+  const jitter = Math.random() * delay * 0.5
+  return Math.round(delay + jitter)
 }
 
 function withTimeout(ms = SQL_TIMEOUT_MS) {
