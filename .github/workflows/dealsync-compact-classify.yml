@@ -4,7 +4,7 @@ on:
     inputs:
       max_concurrent:
         type: string
-        default: '30'
+        default: '70'
       classify_batch_size:
         type: string
         default: '5'
