@@ -27,6 +27,8 @@ jobs:
           rate-limiter-url: ${{ secrets.SXT_RATE_LIMITER_URL }}
           rate-limiter-api-key: ${{ secrets.SXT_RATE_LIMITER_API_KEY }}
           content-fetcher-url: ${{ secrets.CONTENT_FETCHER_URL }}
+          chunk-size: '50'
+          fetch-timeout-ms: '30000'
 
       - id: save-passed
         name: Save passed emails
@@ -80,6 +82,8 @@ jobs:
           hyperbolic-key: ${{ secrets.HYPERBOLIC_KEY }}
           primary-model: ${{ secrets.AI_PRIMARY_MODEL }}
           fallback-model: ${{ secrets.AI_FALLBACK_MODEL }}
+          chunk-size: '10'
+          fetch-timeout-ms: '120000'
 
       - id: save-evals
         name: Save thread evaluations
