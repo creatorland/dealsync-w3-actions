@@ -1,10 +1,10 @@
 name: 'Dealsync'
-description: 'Dealsync pipeline action — dispatch, fetch-and-filter, fetch-and-classify, save-evals, save-deals, save-deal-contacts, update-deal-states, retrigger-stuck, sxt-execute, sync-deal-states, dispatch-deal-state-sync'
+description: 'Dealsync pipeline action — fetch-and-filter, fetch-and-classify, save-evals, save-deals, save-deal-contacts, update-deal-states, sxt-execute, sync-deal-states'
 author: 'creatorland'
 
 inputs:
   command:
-    description: 'Operation: dispatch, fetch-and-filter, fetch-and-classify, save-evals, save-deals, save-deal-contacts, update-deal-states, retrigger-stuck, sxt-execute, sync-deal-states, dispatch-deal-state-sync'
+    description: 'Operation: fetch-and-filter, fetch-and-classify, save-evals, save-deals, save-deal-contacts, update-deal-states, sxt-execute, sync-deal-states'
     required: true
   auth-url:
     description: 'SxT auth proxy URL'
@@ -23,23 +23,6 @@ inputs:
     description: 'SxT rate limiter service URL (optional, fail-open if not set)'
   rate-limiter-api-key:
     description: 'SxT API key for rate limiter token acquisition'
-  w3-rpc-url:
-    description: 'W3 node URL for triggering processors (dispatch, retrigger-stuck, dispatch-deal-state-sync)'
-  processor-name:
-    description: 'Processor workflow name to trigger (dispatch, retrigger-stuck)'
-    default: 'Dealsync Processor'
-  max-filter:
-    description: 'Max emails in filtering status at once (dispatch)'
-    default: '30000'
-  max-classify:
-    description: 'Max emails in classifying status at once (dispatch)'
-    default: '750'
-  filter-batch-size:
-    description: 'Emails per filter batch (dispatch)'
-    default: '200'
-  classify-batch-size:
-    description: 'Emails per classify batch (dispatch)'
-    default: '5'
   content-fetcher-url:
     description: 'Content fetcher service URL (fetch-and-filter, fetch-and-classify)'
   sql:
@@ -59,14 +42,12 @@ inputs:
   ai-api-url:
     description: 'AI API URL (fetch-and-classify)'
     default: 'https://api.hyperbolic.xyz/v1/chat/completions'
-  sync-workflow-name:
-    description: 'Deal state sync workflow name to trigger (dispatch-deal-state-sync)'
-  deal-state-batch-size:
-    description: 'Emails per deal state creation batch (dispatch-deal-state-sync)'
-    default: '500'
-  deal-state-max-emails:
-    description: 'Max emails to process per cycle (dispatch-deal-state-sync)'
-    default: '5000'
+  chunk-size:
+    description: 'Content fetcher chunk size per request'
+    default: '50'
+  fetch-timeout-ms:
+    description: 'Content fetcher request timeout in ms'
+    default: '30000'
   offset:
     description: 'Offset for paginated queries (sync-deal-states)'
     default: '0'
