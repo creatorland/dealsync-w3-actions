@@ -1,7 +1,7 @@
 import { v7 as uuidv7 } from 'uuid'
 import * as core from '@actions/core'
 import { sanitizeSchema, sanitizeId, STATUS } from '../lib/queries.js'
-import { authenticate, executeSql } from '../lib/sxt-client.js'
+import { authenticate, executeSql, acquireRateLimitToken } from '../lib/sxt-client.js'
 import { isRejected } from '../lib/filter-rules.js'
 import { fetchEmails } from '../lib/email-client.js'
 import { runPool, insertBatchEvent } from '../lib/pipeline.js'
@@ -33,8 +33,9 @@ export async function runFilterPipeline() {
   // 1. Authenticate to SxT once at start
   const jwt = await authenticate(authUrl, authSecret)
 
-  // 2. Create a bound exec helper
+  // 2. Create bound exec helpers
   const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql)
+  const execNoRL = (sql) => executeSql(apiUrl, jwt, biscuit, sql, { skipRateLimit: true })
 
   // Accumulate totals across all batches
   let totalFiltered = 0
@@ -119,6 +120,9 @@ export async function runFilterPipeline() {
 
     console.log(`[run-filter-pipeline] processing batch ${batch_id} (${rows.length} rows)`)
 
+    // Acquire rate limit tokens in bulk (2 UPDATEs + 1 batch event)
+    await acquireRateLimitToken(3)
+
     // a. Build metaByMessageId Map from batch.rows
     const metaByMessageId = new Map(rows.map((r) => [r.MESSAGE_ID, r]))
     const userId = rows[0].USER_ID
@@ -154,7 +158,7 @@ export async function runFilterPipeline() {
     // d. UPDATE passed IDs -> pending_classification
     if (filteredIds.length > 0) {
       const quotedIds = filteredIds.map((id) => `'${sanitizeId(id)}'`).join(',')
-      await exec(
+      await execNoRL(
         `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.PENDING_CLASSIFICATION}', UPDATED_AT = CURRENT_TIMESTAMP WHERE EMAIL_METADATA_ID IN (${quotedIds})`,
       )
     }
@@ -162,13 +166,13 @@ export async function runFilterPipeline() {
     // e. UPDATE rejected IDs -> filter_rejected
     if (rejectedIds.length > 0) {
       const quotedIds = rejectedIds.map((id) => `'${sanitizeId(id)}'`).join(',')
-      await exec(
+      await execNoRL(
         `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.FILTER_REJECTED}', UPDATED_AT = CURRENT_TIMESTAMP WHERE EMAIL_METADATA_ID IN (${quotedIds})`,
       )
     }
 
     // f. Insert BATCH_EVENTS with eventType: 'complete'
-    await insertBatchEvent(exec, schema, {
+    await insertBatchEvent(execNoRL, schema, {
       triggerHash: batch_id,
       batchId: batch_id,
       batchType: 'filter',

@@ -27417,10 +27417,11 @@ async function authenticate(authUrl, authSecret, badToken) {
 }
 
 /**
- * Acquire rate limit token. Waits until granted (no max).
+ * Acquire rate limit tokens. Waits until granted (no max).
  * Only network errors consume budget (3 max, then fail-open).
+ * @param {number} tokens — number of tokens to acquire (default 1)
  */
-async function acquireRateLimitToken() {
+async function acquireRateLimitToken(tokens = 1) {
   const rateLimiterUrl = coreExports.getInput('rate-limiter-url');
   const apiKey = coreExports.getInput('rate-limiter-api-key');
 
@@ -27443,7 +27444,7 @@ async function acquireRateLimitToken() {
       const resp = await fetch(`${rateLimiterUrl}/acquire`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey, tokens: 1, source: 'dealsync-action' }),
+        body: JSON.stringify({ apiKey, tokens, source: 'dealsync-action' }),
         signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
       });
 
@@ -27500,13 +27501,19 @@ async function reauthenticate(badToken) {
 /**
  * Execute SQL against SxT. Every path retries with backoff.
  *
- * 1. Acquire rate limit token (waits, fail-open)
+ * 1. Acquire rate limit token (unless skipRateLimit)
  * 2. Call SQL with cached JWT (retry with backoff on network error)
  * 3. On 401 → authenticate(badJwt) with backoff → retry
  * 4. Max retries → fail
+ *
+ * @param {string} apiUrl
+ * @param {string} jwt
+ * @param {string} biscuit
+ * @param {string} sql
+ * @param {{ skipRateLimit?: boolean }} opts
  */
-async function executeSql(apiUrl, jwt, biscuit, sql) {
-  await acquireRateLimitToken();
+async function executeSql(apiUrl, jwt, biscuit, sql, { skipRateLimit = false } = {}) {
+  if (!skipRateLimit) await acquireRateLimitToken();
 
   // Always prefer cachedJwt (refreshed on 401), fall back to passed jwt
   if (!cachedJwt && jwt) cachedJwt = jwt;
@@ -38798,8 +38805,9 @@ async function runFilterPipeline() {
   // 1. Authenticate to SxT once at start
   const jwt = await authenticate(authUrl, authSecret);
 
-  // 2. Create a bound exec helper
+  // 2. Create bound exec helpers
   const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql);
+  const execNoRL = (sql) => executeSql(apiUrl, jwt, biscuit, sql, { skipRateLimit: true });
 
   // Accumulate totals across all batches
   let totalFiltered = 0;
@@ -38884,6 +38892,9 @@ async function runFilterPipeline() {
 
     console.log(`[run-filter-pipeline] processing batch ${batch_id} (${rows.length} rows)`);
 
+    // Acquire rate limit tokens in bulk (2 UPDATEs + 1 batch event)
+    await acquireRateLimitToken(3);
+
     // a. Build metaByMessageId Map from batch.rows
     const metaByMessageId = new Map(rows.map((r) => [r.MESSAGE_ID, r]));
     const userId = rows[0].USER_ID;
@@ -38919,7 +38930,7 @@ async function runFilterPipeline() {
     // d. UPDATE passed IDs -> pending_classification
     if (filteredIds.length > 0) {
       const quotedIds = filteredIds.map((id) => `'${sanitizeId(id)}'`).join(',');
-      await exec(
+      await execNoRL(
         `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.PENDING_CLASSIFICATION}', UPDATED_AT = CURRENT_TIMESTAMP WHERE EMAIL_METADATA_ID IN (${quotedIds})`,
       );
     }
@@ -38927,13 +38938,13 @@ async function runFilterPipeline() {
     // e. UPDATE rejected IDs -> filter_rejected
     if (rejectedIds.length > 0) {
       const quotedIds = rejectedIds.map((id) => `'${sanitizeId(id)}'`).join(',');
-      await exec(
+      await execNoRL(
         `UPDATE ${schema}.DEAL_STATES SET STATUS = '${STATUS.FILTER_REJECTED}', UPDATED_AT = CURRENT_TIMESTAMP WHERE EMAIL_METADATA_ID IN (${quotedIds})`,
       );
     }
 
     // f. Insert BATCH_EVENTS with eventType: 'complete'
-    await insertBatchEvent(exec, schema, {
+    await insertBatchEvent(execNoRL, schema, {
       triggerHash: batch_id,
       batchId: batch_id,
       batchType: 'filter',
@@ -39215,11 +39226,12 @@ async function runClassifyPipeline() {
   // 1. Authenticate to SxT once at start
   const jwt = await authenticate(authUrl, authSecret);
 
-  // 2. Create a bound exec helper
+  // 2. Create bound exec helpers
   const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql);
+  const execNoRL = (sql) => executeSql(apiUrl, jwt, biscuit, sql, { skipRateLimit: true });
 
-  // 3. Create write batcher
-  const batcher = new WriteBatcher(exec, schema, { flushIntervalMs, flushThreshold });
+  // 3. Create write batcher (uses execNoRL — tokens acquired in bulk by workers)
+  const batcher = new WriteBatcher(execNoRL, schema, { flushIntervalMs, flushThreshold });
 
   // =========================================================================
   //  CLAIM FUNCTION (inline, same pattern as claim-classify-batch)
@@ -39306,13 +39318,17 @@ async function runClassifyPipeline() {
 
     console.log(`[run-classify-pipeline] processing batch ${batchId} (${rows.length} rows)`);
 
+    // Acquire rate limit tokens in bulk for this batch attempt
+    // ~2 individual SQL calls (audit check + audit insert) — batcher handles the rest
+    await acquireRateLimitToken(2);
+
     // -----------------------------------------------------------------------
     // Step 2: Get or create audit — check for existing audit (retry case)
     // -----------------------------------------------------------------------
 
     let threads = null;
 
-    const existingAudit = await exec(saveResults.getAuditByBatchId(schema, batchId));
+    const existingAudit = await execNoRL(saveResults.getAuditByBatchId(schema, batchId));
 
     if (existingAudit && existingAudit.length > 0 && existingAudit[0].AI_EVALUATION) {
       try {
@@ -39437,7 +39453,7 @@ async function runClassifyPipeline() {
       const aiOutput = { threads };
       const evaluation = sanitizeString(JSON.stringify(aiOutput).substring(0, 6400));
       try {
-        await exec(
+        await execNoRL(
           saveResults.insertAudit(schema, {
             id: auditId,
             batchId,
