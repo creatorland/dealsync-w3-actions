@@ -80,10 +80,14 @@ export class WriteBatcher {
   // Lifecycle
   // ===========================================================
 
-  /** Flush all pending queues and clear the timer. Called at pipeline end. */
+  /** Flush all pending queues and clear the timer. Called at pipeline end. Loops until all queues are empty. */
   async drain() {
     clearInterval(this._timer)
-    await this._flushAll()
+    let hasItems = true
+    while (hasItems) {
+      await this._flushAll()
+      hasItems = Object.values(this._queues).some((q) => q.items.length > 0)
+    }
   }
 
   /** Clear the timer without flushing. Rejects all pending waiters. For cleanup on fatal error. */
