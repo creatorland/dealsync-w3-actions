@@ -73,10 +73,11 @@ export async function authenticate(authUrl, authSecret, badToken) {
 }
 
 /**
- * Acquire rate limit token. Waits until granted (no max).
+ * Acquire rate limit tokens. Waits until granted (no max).
  * Only network errors consume budget (3 max, then fail-open).
+ * @param {number} tokens — number of tokens to acquire (default 1)
  */
-async function acquireRateLimitToken() {
+export async function acquireRateLimitToken(tokens = 1) {
   const rateLimiterUrl = core.getInput('rate-limiter-url')
   const apiKey = core.getInput('rate-limiter-api-key')
 
@@ -99,7 +100,7 @@ async function acquireRateLimitToken() {
       const resp = await fetch(`${rateLimiterUrl}/acquire`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey, tokens: 1, source: 'dealsync-action' }),
+        body: JSON.stringify({ apiKey, tokens, source: 'dealsync-action' }),
         signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
       })
 
@@ -156,13 +157,19 @@ async function reauthenticate(badToken) {
 /**
  * Execute SQL against SxT. Every path retries with backoff.
  *
- * 1. Acquire rate limit token (waits, fail-open)
+ * 1. Acquire rate limit token (unless skipRateLimit)
  * 2. Call SQL with cached JWT (retry with backoff on network error)
  * 3. On 401 → authenticate(badJwt) with backoff → retry
  * 4. Max retries → fail
+ *
+ * @param {string} apiUrl
+ * @param {string} jwt
+ * @param {string} biscuit
+ * @param {string} sql
+ * @param {{ skipRateLimit?: boolean }} opts
  */
-export async function executeSql(apiUrl, jwt, biscuit, sql) {
-  await acquireRateLimitToken()
+export async function executeSql(apiUrl, jwt, biscuit, sql, { skipRateLimit = false } = {}) {
+  if (!skipRateLimit) await acquireRateLimitToken()
 
   // Always prefer cachedJwt (refreshed on 401), fall back to passed jwt
   if (!cachedJwt && jwt) cachedJwt = jwt

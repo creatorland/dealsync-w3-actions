@@ -7,7 +7,7 @@ import {
   STATUS,
   saveResults,
 } from '../lib/queries.js'
-import { authenticate, executeSql } from '../lib/sxt-client.js'
+import { authenticate, executeSql, acquireRateLimitToken } from '../lib/sxt-client.js'
 import { callModel, parseAndValidate } from '../lib/ai-client.js'
 import { buildPrompt } from '../lib/build-prompt.js'
 import { fetchEmails } from '../lib/email-client.js'
@@ -45,11 +45,12 @@ export async function runClassifyPipeline() {
   // 1. Authenticate to SxT once at start
   const jwt = await authenticate(authUrl, authSecret)
 
-  // 2. Create a bound exec helper
+  // 2. Create bound exec helpers
   const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql)
+  const execNoRL = (sql) => executeSql(apiUrl, jwt, biscuit, sql, { skipRateLimit: true })
 
-  // 3. Create write batcher
-  const batcher = new WriteBatcher(exec, schema, { flushIntervalMs, flushThreshold })
+  // 3. Create write batcher (uses execNoRL — tokens acquired in bulk by workers)
+  const batcher = new WriteBatcher(execNoRL, schema, { flushIntervalMs, flushThreshold })
 
   // =========================================================================
   //  CLAIM FUNCTION (inline, same pattern as claim-classify-batch)
@@ -136,13 +137,17 @@ export async function runClassifyPipeline() {
 
     console.log(`[run-classify-pipeline] processing batch ${batchId} (${rows.length} rows)`)
 
+    // Acquire rate limit tokens in bulk for this batch attempt
+    // ~2 individual SQL calls (audit check + audit insert) — batcher handles the rest
+    await acquireRateLimitToken(2)
+
     // -----------------------------------------------------------------------
     // Step 2: Get or create audit — check for existing audit (retry case)
     // -----------------------------------------------------------------------
 
     let threads = null
 
-    const existingAudit = await exec(saveResults.getAuditByBatchId(schema, batchId))
+    const existingAudit = await execNoRL(saveResults.getAuditByBatchId(schema, batchId))
 
     if (existingAudit && existingAudit.length > 0 && existingAudit[0].AI_EVALUATION) {
       try {
@@ -267,7 +272,7 @@ export async function runClassifyPipeline() {
       const aiOutput = { threads }
       const evaluation = sanitizeString(JSON.stringify(aiOutput).substring(0, 6400))
       try {
-        await exec(
+        await execNoRL(
           saveResults.insertAudit(schema, {
             id: auditId,
             batchId,
