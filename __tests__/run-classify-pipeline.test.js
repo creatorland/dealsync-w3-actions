@@ -48,8 +48,24 @@ const mockParseAndValidate = jest.fn()
 jest.unstable_mockModule('../src/lib/ai-client.js', () => ({
   callModel: mockCallModel,
   parseAndValidate: mockParseAndValidate,
-  VALID_CATEGORIES: new Set(['new', 'in_progress', 'completed', 'not_interested', 'likely_scam', 'low_confidence']),
-  VALID_DEAL_TYPES: new Set(['brand_collaboration', 'sponsorship', 'affiliate', 'product_seeding', 'ambassador', 'content_partnership', 'paid_placement', 'other_business']),
+  VALID_CATEGORIES: new Set([
+    'new',
+    'in_progress',
+    'completed',
+    'not_interested',
+    'likely_scam',
+    'low_confidence',
+  ]),
+  VALID_DEAL_TYPES: new Set([
+    'brand_collaboration',
+    'sponsorship',
+    'affiliate',
+    'product_seeding',
+    'ambassador',
+    'content_partnership',
+    'paid_placement',
+    'other_business',
+  ]),
 }))
 
 // Mock build-prompt
@@ -106,26 +122,32 @@ function makeBatchRows(count = 2) {
 }
 
 function makeThreads(rows, { allDeals = false } = {}) {
-  return rows
-    .reduce((acc, r) => {
-      if (!acc.find((t) => t.thread_id === r.THREAD_ID)) {
-        acc.push({
-          thread_id: r.THREAD_ID,
-          is_deal: allDeals || r.THREAD_ID === 'thread-1',
-          ai_score: 8,
-          ai_summary: `Summary for ${r.THREAD_ID}`,
-          category: allDeals || r.THREAD_ID === 'thread-1' ? 'new' : null,
-          deal_name: allDeals || r.THREAD_ID === 'thread-1' ? 'Test Deal' : null,
-          deal_type: 'brand_collaboration',
-          deal_value: '1000',
-          currency: 'USD',
-          main_contact: allDeals || r.THREAD_ID === 'thread-1'
-            ? { name: 'Alice', email: 'alice@co.com', company: 'TestCo', title: 'CEO', phone_number: '555-1234' }
+  return rows.reduce((acc, r) => {
+    if (!acc.find((t) => t.thread_id === r.THREAD_ID)) {
+      acc.push({
+        thread_id: r.THREAD_ID,
+        is_deal: allDeals || r.THREAD_ID === 'thread-1',
+        ai_score: 8,
+        ai_summary: `Summary for ${r.THREAD_ID}`,
+        category: allDeals || r.THREAD_ID === 'thread-1' ? 'new' : null,
+        deal_name: allDeals || r.THREAD_ID === 'thread-1' ? 'Test Deal' : null,
+        deal_type: 'brand_collaboration',
+        deal_value: '1000',
+        currency: 'USD',
+        main_contact:
+          allDeals || r.THREAD_ID === 'thread-1'
+            ? {
+                name: 'Alice',
+                email: 'alice@co.com',
+                company: 'TestCo',
+                title: 'CEO',
+                phone_number: '555-1234',
+              }
             : null,
-        })
-      }
-      return acc
-    }, [])
+      })
+    }
+    return acc
+  }, [])
 }
 
 // ============================================================
@@ -256,9 +278,7 @@ describe('run-classify-pipeline command', () => {
       const batch = await claimFn()
 
       // Step 2: Check existing audit (found!)
-      mockExecuteSql.mockResolvedValueOnce([
-        { AI_EVALUATION: JSON.stringify(cachedAudit) },
-      ])
+      mockExecuteSql.mockResolvedValueOnce([{ AI_EVALUATION: JSON.stringify(cachedAudit) }])
 
       // Step 4: Save evals (no AI calls needed)
       mockExecuteSql.mockResolvedValueOnce([]) // INSERT evals
@@ -396,8 +416,13 @@ describe('run-classify-pipeline command', () => {
 
       mockExecuteSql.mockResolvedValueOnce([]) // no existing audit
 
-      mockFetchEmails.mockResolvedValueOnce([{ messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' }])
-      mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'system-prompt', userPrompt: 'user-prompt' })
+      mockFetchEmails.mockResolvedValueOnce([
+        { messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' },
+      ])
+      mockBuildPrompt.mockReturnValueOnce({
+        systemPrompt: 'system-prompt',
+        userPrompt: 'user-prompt',
+      })
       mockCallModel.mockResolvedValueOnce({ content: '[]' })
       mockParseAndValidate.mockReturnValueOnce(threads)
 
@@ -417,7 +442,11 @@ describe('run-classify-pipeline command', () => {
         { role: 'system', content: 'system-prompt' },
         { role: 'user', content: 'user-prompt' },
       ],
-      { temperature: 0, apiUrl: 'https://ai.example.com/v1/chat/completions', apiKey: 'test-hyp-key' },
+      {
+        temperature: 0,
+        apiUrl: 'https://ai.example.com/v1/chat/completions',
+        apiKey: 'test-hyp-key',
+      },
     )
   })
 
@@ -443,7 +472,9 @@ describe('run-classify-pipeline command', () => {
     mockInputs()
 
     const rows = makeBatchRows(1)
-    const threads = [{ thread_id: 'thread-1', is_deal: false, ai_score: 5, ai_summary: 'test', category: null }]
+    const threads = [
+      { thread_id: 'thread-1', is_deal: false, ai_score: 5, ai_summary: 'test', category: null },
+    ]
 
     mockRunPool.mockImplementation(async (claimFn, workerFn) => {
       mockExecuteSql
@@ -454,7 +485,9 @@ describe('run-classify-pipeline command', () => {
 
       mockExecuteSql.mockResolvedValueOnce([]) // no existing audit
 
-      mockFetchEmails.mockResolvedValueOnce([{ messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' }])
+      mockFetchEmails.mockResolvedValueOnce([
+        { messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' },
+      ])
       mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'sys', userPrompt: 'usr' })
 
       // Primary model fails completely
@@ -487,7 +520,9 @@ describe('run-classify-pipeline command', () => {
     mockInputs()
 
     const rows = makeBatchRows(1)
-    const threads = [{ thread_id: 'thread-1', is_deal: false, ai_score: 5, ai_summary: 'test', category: null }]
+    const threads = [
+      { thread_id: 'thread-1', is_deal: false, ai_score: 5, ai_summary: 'test', category: null },
+    ]
 
     mockRunPool.mockImplementation(async (claimFn, workerFn) => {
       mockExecuteSql
@@ -498,7 +533,9 @@ describe('run-classify-pipeline command', () => {
 
       mockExecuteSql.mockResolvedValueOnce([]) // no existing audit
 
-      mockFetchEmails.mockResolvedValueOnce([{ messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' }])
+      mockFetchEmails.mockResolvedValueOnce([
+        { messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' },
+      ])
       mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'sys', userPrompt: 'usr' })
 
       // Primary model returns content but it can't be parsed
@@ -618,9 +655,7 @@ describe('run-classify-pipeline command', () => {
       const batch = await claimFn()
 
       // Existing audit
-      mockExecuteSql.mockResolvedValueOnce([
-        { AI_EVALUATION: JSON.stringify({ threads }) },
-      ])
+      mockExecuteSql.mockResolvedValueOnce([{ AI_EVALUATION: JSON.stringify({ threads }) }])
 
       // Capture evals SQL
       mockExecuteSql.mockResolvedValueOnce([]) // INSERT evals
@@ -664,9 +699,7 @@ describe('run-classify-pipeline command', () => {
       const batch = await claimFn()
 
       // Existing audit
-      mockExecuteSql.mockResolvedValueOnce([
-        { AI_EVALUATION: JSON.stringify({ threads }) },
-      ])
+      mockExecuteSql.mockResolvedValueOnce([{ AI_EVALUATION: JSON.stringify({ threads }) }])
 
       // Evals
       mockExecuteSql.mockResolvedValueOnce([])
@@ -725,9 +758,7 @@ describe('run-classify-pipeline command', () => {
       const batch = await claimFn()
 
       // Existing audit
-      mockExecuteSql.mockResolvedValueOnce([
-        { AI_EVALUATION: JSON.stringify({ threads }) },
-      ])
+      mockExecuteSql.mockResolvedValueOnce([{ AI_EVALUATION: JSON.stringify({ threads }) }])
 
       // Evals
       mockExecuteSql.mockResolvedValueOnce([])
@@ -749,7 +780,8 @@ describe('run-classify-pipeline command', () => {
 
       // Verify INSERT contacts
       const contactInsert = mockExecuteSql.mock.calls.find(
-        (c) => typeof c[3] === 'string' && c[3].includes('INSERT INTO dealsync_stg_v1.DEAL_CONTACTS'),
+        (c) =>
+          typeof c[3] === 'string' && c[3].includes('INSERT INTO dealsync_stg_v1.DEAL_CONTACTS'),
       )
       expect(contactInsert).toBeTruthy()
       expect(contactInsert[3]).toContain('alice@co.com')
@@ -782,9 +814,7 @@ describe('run-classify-pipeline command', () => {
       const batch = await claimFn()
 
       // Existing audit
-      mockExecuteSql.mockResolvedValueOnce([
-        { AI_EVALUATION: JSON.stringify({ threads }) },
-      ])
+      mockExecuteSql.mockResolvedValueOnce([{ AI_EVALUATION: JSON.stringify({ threads }) }])
 
       // Evals
       mockExecuteSql.mockResolvedValueOnce([])
@@ -831,7 +861,9 @@ describe('run-classify-pipeline command', () => {
     mockInputs()
 
     const rows = makeBatchRows(1)
-    const threads = [{ thread_id: 'thread-1', is_deal: false, ai_score: 5, ai_summary: 'test', category: null }]
+    const threads = [
+      { thread_id: 'thread-1', is_deal: false, ai_score: 5, ai_summary: 'test', category: null },
+    ]
 
     mockRunPool.mockImplementation(async (claimFn, workerFn) => {
       mockExecuteSql
@@ -844,7 +876,9 @@ describe('run-classify-pipeline command', () => {
       mockExecuteSql.mockResolvedValueOnce([])
 
       // AI
-      mockFetchEmails.mockResolvedValueOnce([{ messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' }])
+      mockFetchEmails.mockResolvedValueOnce([
+        { messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' },
+      ])
       mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'sys', userPrompt: 'usr' })
       mockCallModel.mockResolvedValueOnce({ content: '[]' })
       mockParseAndValidate.mockReturnValueOnce(threads)
@@ -906,16 +940,10 @@ describe('run-classify-pipeline command', () => {
     mockInputs()
 
     mockRunPool.mockImplementation(async (claimFn) => {
-      mockExecuteSql
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
+      mockExecuteSql.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([])
       await claimFn()
 
-      mockExecuteSql
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
+      mockExecuteSql.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([])
       await claimFn()
 
       return { processed: 0, failed: 0 }
@@ -934,10 +962,7 @@ describe('run-classify-pipeline command', () => {
     mockInputs()
 
     mockRunPool.mockImplementation(async (claimFn) => {
-      mockExecuteSql
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
+      mockExecuteSql.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([])
 
       await claimFn()
 
@@ -988,7 +1013,9 @@ describe('run-classify-pipeline command', () => {
 
       mockExecuteSql.mockResolvedValueOnce([]) // no existing audit
 
-      mockFetchEmails.mockResolvedValueOnce([{ messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' }])
+      mockFetchEmails.mockResolvedValueOnce([
+        { messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' },
+      ])
       mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'sys', userPrompt: 'usr' })
 
       // Primary fails
@@ -997,9 +1024,7 @@ describe('run-classify-pipeline command', () => {
       // Fallback also fails
       mockCallModel.mockRejectedValueOnce(new Error('Fallback down'))
 
-      await expect(workerFn(batch, { attempt: 0 })).rejects.toThrow(
-        'Classification failed',
-      )
+      await expect(workerFn(batch, { attempt: 0 })).rejects.toThrow('Classification failed')
 
       return { processed: 0, failed: 1 }
     })
@@ -1015,10 +1040,22 @@ describe('run-classify-pipeline command', () => {
     mockInputs()
 
     const rows = [
-      { EMAIL_METADATA_ID: 'em-1', MESSAGE_ID: 'msg-1', USER_ID: 'user-1', THREAD_ID: 'thread-scam', SYNC_STATE_ID: 'ss-1' },
+      {
+        EMAIL_METADATA_ID: 'em-1',
+        MESSAGE_ID: 'msg-1',
+        USER_ID: 'user-1',
+        THREAD_ID: 'thread-scam',
+        SYNC_STATE_ID: 'ss-1',
+      },
     ]
     const threads = [
-      { thread_id: 'thread-scam', is_deal: false, ai_score: 2, ai_summary: 'Scam email', category: 'likely_scam' },
+      {
+        thread_id: 'thread-scam',
+        is_deal: false,
+        ai_score: 2,
+        ai_summary: 'Scam email',
+        category: 'likely_scam',
+      },
     ]
 
     mockRunPool.mockImplementation(async (claimFn, workerFn) => {
@@ -1029,9 +1066,7 @@ describe('run-classify-pipeline command', () => {
       const batch = await claimFn()
 
       // Existing audit with scam thread
-      mockExecuteSql.mockResolvedValueOnce([
-        { AI_EVALUATION: JSON.stringify({ threads }) },
-      ])
+      mockExecuteSql.mockResolvedValueOnce([{ AI_EVALUATION: JSON.stringify({ threads }) }])
 
       // Evals
       mockExecuteSql.mockResolvedValueOnce([])

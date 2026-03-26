@@ -144,7 +144,9 @@ export async function runClassifyPipeline() {
       try {
         const parsed = JSON.parse(existingAudit[0].AI_EVALUATION)
         threads = parsed.threads || parsed || []
-        console.log(`[run-classify-pipeline] audit exists for ${batchId} — using cached (${threads.length} threads)`)
+        console.log(
+          `[run-classify-pipeline] audit exists for ${batchId} — using cached (${threads.length} threads)`,
+        )
       } catch {
         console.log(`[run-classify-pipeline] existing audit has invalid JSON, re-running AI`)
       }
@@ -187,7 +189,10 @@ export async function runClassifyPipeline() {
       // --- Layer 0: Primary model call ---
       let primaryRaw
       try {
-        const result = await callModel(primaryModel, classifyMessages, { temperature: 0, ...aiOpts })
+        const result = await callModel(primaryModel, classifyMessages, {
+          temperature: 0,
+          ...aiOpts,
+        })
         primaryRaw = result.content
       } catch (primaryApiError) {
         console.log(`[run-classify-pipeline] Primary model API failed: ${primaryApiError.message}`)
@@ -213,13 +218,20 @@ export async function runClassifyPipeline() {
                 content: `Your previous classification response could not be parsed as valid JSON.\n\nParse error:\n${parseError.message}\n\nPlease return the corrected classification as a valid JSON array. Fix only the JSON formatting issue. Do not change any classification decisions. Return ONLY the JSON array with no other text.`,
               },
             ]
-            const corrected = await callModel(primaryModel, correctiveMessages, { temperature: 0, ...aiOpts })
+            const corrected = await callModel(primaryModel, correctiveMessages, {
+              temperature: 0,
+              ...aiOpts,
+            })
             const correctedRaw = corrected.content
             threads = parseAndValidate(correctedRaw)
             modelUsed = `${primaryModel}(corrective-retry)`
-            console.log(`[run-classify-pipeline] Corrective retry succeeded: ${threads.length} threads`)
+            console.log(
+              `[run-classify-pipeline] Corrective retry succeeded: ${threads.length} threads`,
+            )
           } catch (correctiveError) {
-            console.log(`[run-classify-pipeline] Corrective retry failed: ${correctiveError.message}`)
+            console.log(
+              `[run-classify-pipeline] Corrective retry failed: ${correctiveError.message}`,
+            )
           }
         }
       }
@@ -229,12 +241,17 @@ export async function runClassifyPipeline() {
         console.log(`[run-classify-pipeline] Falling back to ${fallbackModel}`)
         modelUsed = fallbackModel
         try {
-          const fallbackResult = await callModel(fallbackModel, classifyMessages, { temperature: 0.6, ...aiOpts })
+          const fallbackResult = await callModel(fallbackModel, classifyMessages, {
+            temperature: 0.6,
+            ...aiOpts,
+          })
           const fallbackRaw = fallbackResult.content
           threads = parseAndValidate(fallbackRaw)
           console.log(`[run-classify-pipeline] Fallback model succeeded: ${threads.length} threads`)
         } catch (fallbackError) {
-          console.error(`[run-classify-pipeline] All layers exhausted. Primary and fallback both failed.`)
+          console.error(
+            `[run-classify-pipeline] All layers exhausted. Primary and fallback both failed.`,
+          )
           throw new Error(
             `Classification failed: primary and fallback models both returned no valid JSON. Last error: ${fallbackError.message}`,
           )
@@ -266,7 +283,9 @@ export async function runClassifyPipeline() {
           err.message.includes('unique') ||
           err.message.includes('duplicate')
         ) {
-          console.log(`[run-classify-pipeline] audit already exists for batch (concurrent run), continuing`)
+          console.log(
+            `[run-classify-pipeline] audit already exists for batch (concurrent run), continuing`,
+          )
         } else {
           throw err
         }
@@ -338,7 +357,8 @@ export async function runClassifyPipeline() {
           const dealId = uuidv7()
           const dealName = sanitizeString(thread.deal_name || '')
           const dealType = sanitizeString(thread.deal_type || '')
-          const dealValue = typeof thread.deal_value === 'string' ? parseFloat(thread.deal_value) || 0 : 0
+          const dealValue =
+            typeof thread.deal_value === 'string' ? parseFloat(thread.deal_value) || 0 : 0
           const currency = sanitizeString(thread.currency || 'USD')
           const brand = thread.main_contact ? sanitizeString(thread.main_contact.company || '') : ''
           const category = sanitizeString(thread.category || '')
@@ -398,7 +418,9 @@ export async function runClassifyPipeline() {
         const threadId = sanitizeId(thread.thread_id)
         const dealId = dealByThread[threadId]
         if (!dealId) {
-          console.log(`[run-classify-pipeline] no deal found for thread ${threadId} — skipping contact`)
+          console.log(
+            `[run-classify-pipeline] no deal found for thread ${threadId} — skipping contact`,
+          )
           continue
         }
 

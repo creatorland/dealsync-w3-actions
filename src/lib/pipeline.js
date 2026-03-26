@@ -22,7 +22,9 @@ export async function runPool(claimFn, workerFn, { maxConcurrent, maxRetries }) 
     let currentAttempt = batch.attempts || 0
     return (async () => {
       if (currentAttempt >= maxRetries) {
-        core.error(`Batch ${batch.batch_id} already exhausted (${currentAttempt}/${maxRetries}), dead-lettered`)
+        core.error(
+          `Batch ${batch.batch_id} already exhausted (${currentAttempt}/${maxRetries}), dead-lettered`,
+        )
         results.failed++
         return
       }

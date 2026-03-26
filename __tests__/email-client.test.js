@@ -81,9 +81,7 @@ describe('fetchEmails', () => {
     const messageIds = ['msg-1', 'msg-2']
     const meta = makeMeta(messageIds)
 
-    mockFetch.mockResolvedValueOnce(
-      okResponse([{ messageId: 'msg-1' }, { messageId: 'msg-2' }]),
-    )
+    mockFetch.mockResolvedValueOnce(okResponse([{ messageId: 'msg-1' }, { messageId: 'msg-2' }]))
 
     const result = await fetchEmails(messageIds, meta, makeOpts({ chunkSize: 10 }))
 
@@ -179,9 +177,7 @@ describe('fetchEmails', () => {
   })
 
   it('enriches email even when meta has no PREVIOUS_AI_SUMMARY', async () => {
-    const meta = new Map([
-      ['msg-1', { EMAIL_METADATA_ID: 'meta-1', THREAD_ID: 'thread-1' }],
-    ])
+    const meta = new Map([['msg-1', { EMAIL_METADATA_ID: 'meta-1', THREAD_ID: 'thread-1' }]])
 
     mockFetch.mockResolvedValueOnce(okResponse([{ messageId: 'msg-1' }]))
 

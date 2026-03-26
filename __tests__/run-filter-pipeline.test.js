@@ -119,7 +119,7 @@ describe('run-filter-pipeline command', () => {
       mockExecuteSql
         .mockResolvedValueOnce([]) // UPDATE claim
         .mockResolvedValueOnce(rows) // SELECT claimed rows
-        // processFilterBatch will call exec for UPDATE passed + UPDATE rejected + insertBatchEvent via mock
+      // processFilterBatch will call exec for UPDATE passed + UPDATE rejected + insertBatchEvent via mock
 
       const batch = await claimFn()
       expect(batch).not.toBeNull()
@@ -136,10 +136,7 @@ describe('run-filter-pipeline command', () => {
       mockFetchEmails.mockResolvedValueOnce(emails)
 
       // First email passes, second rejected, third passes
-      mockIsRejected
-        .mockReturnValueOnce(false)
-        .mockReturnValueOnce(true)
-        .mockReturnValueOnce(false)
+      mockIsRejected.mockReturnValueOnce(false).mockReturnValueOnce(true).mockReturnValueOnce(false)
 
       // Mock exec calls for status updates
       mockExecuteSql.mockResolvedValueOnce([]) // UPDATE passed
@@ -170,10 +167,7 @@ describe('run-filter-pipeline command', () => {
 
     // Verify authentication was called once
     expect(mockAuthenticate).toHaveBeenCalledTimes(1)
-    expect(mockAuthenticate).toHaveBeenCalledWith(
-      'https://auth.example.com/token',
-      'test-secret',
-    )
+    expect(mockAuthenticate).toHaveBeenCalledWith('https://auth.example.com/token', 'test-secret')
   })
 
   // ----------------------------------------------------------
@@ -521,16 +515,10 @@ describe('run-filter-pipeline command', () => {
 
     mockRunPool.mockImplementation(async (claimFn) => {
       // Claim twice to verify auth is not called again
-      mockExecuteSql
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
+      mockExecuteSql.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([])
       await claimFn()
 
-      mockExecuteSql
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
+      mockExecuteSql.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([])
       await claimFn()
 
       return { processed: 0, failed: 0 }
@@ -795,10 +783,7 @@ describe('run-filter-pipeline command', () => {
     mockInputs()
 
     mockRunPool.mockImplementation(async (claimFn) => {
-      mockExecuteSql
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
+      mockExecuteSql.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([])
 
       await claimFn()
 
