@@ -67,56 +67,46 @@ describe('runPool', () => {
     // Should log error messages
     expect(mockCore.error).toHaveBeenCalled()
     // Should log dead-lettered message
-    const deadLetteredCall = mockCore.error.mock.calls.find((c) =>
-      c[0].includes('dead-lettered'),
-    )
+    const deadLetteredCall = mockCore.error.mock.calls.find((c) => c[0].includes('dead-lettered'))
     expect(deadLetteredCall).toBeTruthy()
   })
 
-  it(
-    'retries and eventually succeeds',
-    async () => {
-      const batches = [{ batch_id: 'b-flaky', attempts: 0 }]
-      let idx = 0
-      const claimFn = jest.fn(async () => (idx < batches.length ? batches[idx++] : null))
-      let callCount = 0
-      const workerFn = jest.fn(async () => {
-        callCount++
-        if (callCount < 2) throw new Error('transient')
-      })
+  it('retries and eventually succeeds', async () => {
+    const batches = [{ batch_id: 'b-flaky', attempts: 0 }]
+    let idx = 0
+    const claimFn = jest.fn(async () => (idx < batches.length ? batches[idx++] : null))
+    let callCount = 0
+    const workerFn = jest.fn(async () => {
+      callCount++
+      if (callCount < 2) throw new Error('transient')
+    })
 
-      const results = await runPool(claimFn, workerFn, { maxConcurrent: 1, maxRetries: 5 })
+    const results = await runPool(claimFn, workerFn, { maxConcurrent: 1, maxRetries: 5 })
 
-      expect(results).toEqual({ processed: 1, failed: 0 })
-      expect(workerFn).toHaveBeenCalledTimes(2)
-      // First call fails (attempt 0), second call succeeds (attempt 1)
-      expect(workerFn).toHaveBeenCalledWith(batches[0], { attempt: 0 })
-      expect(workerFn).toHaveBeenCalledWith(batches[0], { attempt: 1 })
-    },
-    10000,
-  )
+    expect(results).toEqual({ processed: 1, failed: 0 })
+    expect(workerFn).toHaveBeenCalledTimes(2)
+    // First call fails (attempt 0), second call succeeds (attempt 1)
+    expect(workerFn).toHaveBeenCalledWith(batches[0], { attempt: 0 })
+    expect(workerFn).toHaveBeenCalledWith(batches[0], { attempt: 1 })
+  }, 10000)
 
-  it(
-    'respects retriggered batch attempt count',
-    async () => {
-      // Batch already attempted once (retriggered)
-      const batches = [{ batch_id: 'b-retrigger', attempts: 1 }]
-      let idx = 0
-      const claimFn = jest.fn(async () => (idx < batches.length ? batches[idx++] : null))
-      const workerFn = jest.fn(async () => {
-        throw new Error('still failing')
-      })
+  it('respects retriggered batch attempt count', async () => {
+    // Batch already attempted once (retriggered)
+    const batches = [{ batch_id: 'b-retrigger', attempts: 1 }]
+    let idx = 0
+    const claimFn = jest.fn(async () => (idx < batches.length ? batches[idx++] : null))
+    const workerFn = jest.fn(async () => {
+      throw new Error('still failing')
+    })
 
-      const results = await runPool(claimFn, workerFn, { maxConcurrent: 1, maxRetries: 3 })
+    const results = await runPool(claimFn, workerFn, { maxConcurrent: 1, maxRetries: 3 })
 
-      expect(results).toEqual({ processed: 0, failed: 1 })
-      // Should only attempt from 1 to maxRetries (2 more attempts)
-      expect(workerFn).toHaveBeenCalledTimes(2)
-      expect(workerFn).toHaveBeenCalledWith(batches[0], { attempt: 1 })
-      expect(workerFn).toHaveBeenCalledWith(batches[0], { attempt: 2 })
-    },
-    10000,
-  )
+    expect(results).toEqual({ processed: 0, failed: 1 })
+    // Should only attempt from 1 to maxRetries (2 more attempts)
+    expect(workerFn).toHaveBeenCalledTimes(2)
+    expect(workerFn).toHaveBeenCalledWith(batches[0], { attempt: 1 })
+    expect(workerFn).toHaveBeenCalledWith(batches[0], { attempt: 2 })
+  }, 10000)
 
   it('failed workers do not stop the pool', async () => {
     const batches = [

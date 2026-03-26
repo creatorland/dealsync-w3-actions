@@ -69,9 +69,7 @@ export async function runClaimFilterBatch() {
   const stuckBatchId = stuckBatches[0].BATCH_ID
   const attempts = stuckBatches[0].ATTEMPTS
 
-  console.log(
-    `[claim-filter-batch] re-claiming stuck batch ${stuckBatchId} (attempts=${attempts})`,
-  )
+  console.log(`[claim-filter-batch] re-claiming stuck batch ${stuckBatchId} (attempts=${attempts})`)
 
   // SELECT its rows
   const stuckRows = await exec(

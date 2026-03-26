@@ -119,9 +119,7 @@ export async function fetchEmails(messageIds, metaByMessageId, opts) {
   }
 
   if (allEmails.length === 0 && messageIds.length > 0) {
-    throw new Error(
-      `All content fetches failed — 0/${messageIds.length} emails retrieved`,
-    )
+    throw new Error(`All content fetches failed — 0/${messageIds.length} emails retrieved`)
   }
 
   return allEmails

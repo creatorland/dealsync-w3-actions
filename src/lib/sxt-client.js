@@ -71,7 +71,9 @@ async function acquireRateLimitToken() {
         // Non-rate-limit HTTP error — consumes error budget
         errorAttempts++
         const delay = Math.min(1000 * Math.pow(2, errorAttempts), 30000)
-        console.log(`[sxt-client] Rate limiter HTTP ${resp.status}, error ${errorAttempts}/${MAX_ERROR_RETRIES}, retrying in ${delay}ms`)
+        console.log(
+          `[sxt-client] Rate limiter HTTP ${resp.status}, error ${errorAttempts}/${MAX_ERROR_RETRIES}, retrying in ${delay}ms`,
+        )
         await new Promise((r) => setTimeout(r, delay))
         continue
       }
@@ -89,7 +91,9 @@ async function acquireRateLimitToken() {
       // Network error — consumes error budget
       errorAttempts++
       const delay = Math.min(1000 * Math.pow(2, errorAttempts), 30000)
-      console.log(`[sxt-client] Rate limiter error: ${err.message}, error ${errorAttempts}/${MAX_ERROR_RETRIES}, retrying in ${delay}ms`)
+      console.log(
+        `[sxt-client] Rate limiter error: ${err.message}, error ${errorAttempts}/${MAX_ERROR_RETRIES}, retrying in ${delay}ms`,
+      )
       await new Promise((r) => setTimeout(r, delay))
     }
   }

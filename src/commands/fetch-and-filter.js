@@ -20,7 +20,9 @@ export async function runFetchAndFilter() {
 
   if (!batchId) throw new Error('batch-id is required')
 
-  console.log(`[fetch-and-filter] starting for batch ${batchId} (chunk=${chunkSize}, timeout=${fetchTimeoutMs}ms)`)
+  console.log(
+    `[fetch-and-filter] starting for batch ${batchId} (chunk=${chunkSize}, timeout=${fetchTimeoutMs}ms)`,
+  )
 
   // 1. Authenticate + fetch metadata from SxT
   const jwt = await authenticate(authUrl, authSecret)
@@ -75,7 +77,9 @@ export async function runFetchAndFilter() {
         allEmails.push(email)
       }
     } catch (err) {
-      console.log(`[fetch-and-filter] content fetch failed for chunk ${Math.floor(i / chunkSize) + 1}: ${err.message}`)
+      console.log(
+        `[fetch-and-filter] content fetch failed for chunk ${Math.floor(i / chunkSize) + 1}: ${err.message}`,
+      )
     }
   }
 

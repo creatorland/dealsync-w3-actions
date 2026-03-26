@@ -139,7 +139,9 @@ describe('claim-filter-batch command', () => {
 
     // SELECT query
     const selectSql = getSqlText(sqlCalls[1])
-    expect(selectSql).toContain('SELECT EMAIL_METADATA_ID, MESSAGE_ID, USER_ID, THREAD_ID, SYNC_STATE_ID')
+    expect(selectSql).toContain(
+      'SELECT EMAIL_METADATA_ID, MESSAGE_ID, USER_ID, THREAD_ID, SYNC_STATE_ID',
+    )
     expect(selectSql).toContain("BATCH_ID = 'test-uuid-1'")
 
     // INSERT batch event
@@ -422,7 +424,9 @@ describe('claim-filter-batch command', () => {
     const updateSql = getSqlText(sqlCalls[0])
 
     // Must use the subquery pattern for atomicity
-    expect(updateSql).toMatch(/UPDATE.*SET.*WHERE EMAIL_METADATA_ID IN \(SELECT EMAIL_METADATA_ID FROM/)
+    expect(updateSql).toMatch(
+      /UPDATE.*SET.*WHERE EMAIL_METADATA_ID IN \(SELECT EMAIL_METADATA_ID FROM/,
+    )
   })
 
   // ----------------------------------------------------------
@@ -437,7 +441,17 @@ describe('claim-filter-batch command', () => {
       .mockResolvedValueOnce(sxtResponse())
       .mockResolvedValueOnce(sxtResponse([]))
       .mockResolvedValueOnce(sxtResponse([{ BATCH_ID: 'old-batch-id', ATTEMPTS: 1 }]))
-      .mockResolvedValueOnce(sxtResponse([{ EMAIL_METADATA_ID: 'em-1', MESSAGE_ID: 'msg-1', USER_ID: 'u-1', THREAD_ID: 't-1', SYNC_STATE_ID: 'ss-1' }]))
+      .mockResolvedValueOnce(
+        sxtResponse([
+          {
+            EMAIL_METADATA_ID: 'em-1',
+            MESSAGE_ID: 'msg-1',
+            USER_ID: 'u-1',
+            THREAD_ID: 't-1',
+            SYNC_STATE_ID: 'ss-1',
+          },
+        ]),
+      )
       .mockResolvedValueOnce(sxtResponse()) // UPDATE UPDATED_AT
       .mockResolvedValueOnce(sxtResponse()) // INSERT batch event
 

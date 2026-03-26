@@ -139,7 +139,9 @@ describe('claim-classify-batch', () => {
 
     // Verify SELECT claimed rows
     const selectSql = getSqlText(sqlCalls[1])
-    expect(selectSql).toContain('SELECT EMAIL_METADATA_ID, MESSAGE_ID, USER_ID, THREAD_ID, SYNC_STATE_ID')
+    expect(selectSql).toContain(
+      'SELECT EMAIL_METADATA_ID, MESSAGE_ID, USER_ID, THREAD_ID, SYNC_STATE_ID',
+    )
     expect(selectSql).toContain("BATCH_ID = 'test-uuid-1'")
 
     // Verify batch event INSERT
@@ -409,7 +411,17 @@ describe('claim-classify-batch', () => {
       .mockResolvedValueOnce(sxtResponse())
       .mockResolvedValueOnce(sxtResponse([]))
       .mockResolvedValueOnce(sxtResponse([{ BATCH_ID: 'stuck-1', ATTEMPTS: '2' }]))
-      .mockResolvedValueOnce(sxtResponse([{ EMAIL_METADATA_ID: 'em-1', MESSAGE_ID: 'msg-1', USER_ID: 'u-1', THREAD_ID: 't-1', SYNC_STATE_ID: 'ss-1' }]))
+      .mockResolvedValueOnce(
+        sxtResponse([
+          {
+            EMAIL_METADATA_ID: 'em-1',
+            MESSAGE_ID: 'msg-1',
+            USER_ID: 'u-1',
+            THREAD_ID: 't-1',
+            SYNC_STATE_ID: 'ss-1',
+          },
+        ]),
+      )
       .mockResolvedValueOnce(sxtResponse())
       .mockResolvedValueOnce(sxtResponse())
 

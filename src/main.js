@@ -23,7 +23,7 @@ const COMMANDS = {
   'save-deals': runSaveDeals,
   'update-deal-states': runUpdateDealStates,
   'sync-deal-states': runSyncDealStates,
-  'eval': runEval,
+  eval: runEval,
   'eval-compare': runEvalCompare,
   'claim-filter-batch': runClaimFilterBatch,
   'claim-classify-batch': runClaimClassifyBatch,
