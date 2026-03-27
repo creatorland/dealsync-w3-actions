@@ -430,9 +430,15 @@ export async function runClassifyPipeline() {
       }
     }
 
-    const quotedDealIds = dealEmailIds.map((id) => `'${sanitizeId(id)}'`)
-    const quotedNotDealIds = notDealEmailIds.map((id) => `'${sanitizeId(id)}'`)
-    await batcher.pushStateUpdates(quotedDealIds, quotedNotDealIds)
+    // Write state updates directly (not through batcher) to ensure they commit
+    if (dealEmailIds.length > 0) {
+      const quotedIds = dealEmailIds.map((id) => `'${sanitizeId(id)}'`).join(',')
+      await execNoRL(`UPDATE ${schema}.DEAL_STATES SET STATUS = 'deal' WHERE EMAIL_METADATA_ID IN (${quotedIds})`)
+    }
+    if (notDealEmailIds.length > 0) {
+      const quotedIds = notDealEmailIds.map((id) => `'${sanitizeId(id)}'`).join(',')
+      await execNoRL(`UPDATE ${schema}.DEAL_STATES SET STATUS = 'not_deal' WHERE EMAIL_METADATA_ID IN (${quotedIds})`)
+    }
 
     console.log(
       `[run-classify-pipeline] states: ${dealEmailIds.length} -> deal, ${notDealEmailIds.length} -> not_deal`,
