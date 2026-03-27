@@ -39298,7 +39298,7 @@ async function runClassifyPipeline() {
 
     // SELECT the claimed rows
     const rows = await exec(
-      `SELECT EMAIL_METADATA_ID, MESSAGE_ID, USER_ID, THREAD_ID, SYNC_STATE_ID FROM ${schema}.DEAL_STATES WHERE BATCH_ID = '${batchId}'`,
+      `SELECT ds.EMAIL_METADATA_ID, ds.MESSAGE_ID, ds.USER_ID, ds.THREAD_ID, ds.SYNC_STATE_ID, ete.AI_SUMMARY AS PREVIOUS_AI_SUMMARY FROM ${schema}.DEAL_STATES ds LEFT JOIN ${schema}.EMAIL_THREAD_EVALUATIONS ete ON ete.THREAD_ID = ds.THREAD_ID WHERE ds.BATCH_ID = '${batchId}'`,
     );
 
     const count = rows ? rows.length : 0;
@@ -39338,7 +39338,7 @@ async function runClassifyPipeline() {
 
     // SELECT its rows
     const stuckRows = await exec(
-      `SELECT EMAIL_METADATA_ID, MESSAGE_ID, USER_ID, THREAD_ID, SYNC_STATE_ID FROM ${schema}.DEAL_STATES WHERE BATCH_ID = '${stuckBatchId}'`,
+      `SELECT ds.EMAIL_METADATA_ID, ds.MESSAGE_ID, ds.USER_ID, ds.THREAD_ID, ds.SYNC_STATE_ID, ete.AI_SUMMARY AS PREVIOUS_AI_SUMMARY FROM ${schema}.DEAL_STATES ds LEFT JOIN ${schema}.EMAIL_THREAD_EVALUATIONS ete ON ete.THREAD_ID = ds.THREAD_ID WHERE ds.BATCH_ID = '${stuckBatchId}'`,
     );
 
     // UPDATE UPDATED_AT to prevent other instances from grabbing it
