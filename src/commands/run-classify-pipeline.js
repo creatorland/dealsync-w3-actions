@@ -139,6 +139,7 @@ export async function runClassifyPipeline() {
 
   async function processClassifyBatch(batch) {
     const { batch_id: batchId, rows } = batch
+    const creatorEmail = rows[0].CREATOR_EMAIL || ''
 
     console.log(`[run-classify-pipeline] processing batch ${batchId} (${rows.length} rows)`)
 
@@ -246,7 +247,6 @@ export async function runClassifyPipeline() {
       }
 
       // b. Build prompt via buildPrompt(emails)
-      const creatorEmail = rows[0].CREATOR_EMAIL || ''
       const { systemPrompt, userPrompt, threadOrder } = buildPrompt(allEmails, { creatorEmail })
 
       // c. 4-layer AI resilience pipeline
@@ -439,6 +439,9 @@ export async function runClassifyPipeline() {
         if (!mc) continue
         const email = (mc.email || '').trim().toLowerCase()
         if (!email) continue
+
+        // Skip creator's own email — AI sometimes ignores the "external only" rule
+        if (creatorEmail && email === creatorEmail.trim().toLowerCase()) continue
 
         const threadId = sanitizeId(thread.thread_id)
         const userId = userByThread[threadId] ? sanitizeId(userByThread[threadId]) : ''
