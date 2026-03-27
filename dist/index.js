@@ -38557,7 +38557,7 @@ async function sweepStuckRows(exec, schema, { activeStatus, batchType, maxRetrie
  *
  * @param {Function} exec
  * @param {string} schema
- * @param {{ statuses: string[], staleMinutes: number }} opts
+ * @param {{ statuses: string[], staleMinutes: number|string }} opts — staleMinutes may be a non-negative integer or a numeric string (coerced before SQL)
  * @returns {Promise<number>} rows transitioned to failed
  */
 async function sweepOrphanedRows(exec, schema, { statuses, staleMinutes }) {
