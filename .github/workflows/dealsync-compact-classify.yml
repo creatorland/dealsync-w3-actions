@@ -16,7 +16,7 @@ on:
         default: '10'
       fetch_timeout_ms:
         type: string
-        default: '120000'
+        default: '240000'
 
 concurrency:
   group: compact-classify

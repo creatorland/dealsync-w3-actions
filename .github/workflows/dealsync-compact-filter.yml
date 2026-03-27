@@ -16,7 +16,7 @@ on:
         default: '50'
       fetch_timeout_ms:
         type: string
-        default: '30000'
+        default: '240000'
 
 concurrency:
   group: compact-filter
