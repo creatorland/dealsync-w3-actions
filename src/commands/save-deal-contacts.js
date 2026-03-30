@@ -1,7 +1,11 @@
 import * as core from '@actions/core'
 import { sanitizeId, sanitizeString, sanitizeSchema, saveResults } from '../lib/queries.js'
 import { authenticate, executeSql } from '../lib/sxt-client.js'
-import { deals as dealsSql, contacts as contactsSql, dealContacts as dealContactsSql } from '../lib/sql/index.js'
+import {
+  deals as dealsSql,
+  contacts as contactsSql,
+  dealContacts as dealContactsSql,
+} from '../lib/sql/index.js'
 
 function toSqlNullable(s) {
   return s ? `'${sanitizeString(s)}'` : 'NULL'
@@ -103,12 +107,7 @@ export async function runSaveDealContacts() {
   // Upsert core contacts (non-fatal — table may not exist yet)
   if (coreContactValues.length > 0) {
     try {
-      await executeSql(
-        apiUrl,
-        jwt,
-        biscuit,
-        contactsSql.upsert(coreSchema, coreContactValues),
-      )
+      await executeSql(apiUrl, jwt, biscuit, contactsSql.upsert(coreSchema, coreContactValues))
     } catch (err) {
       console.error(`[save-deal-contacts] core contacts upsert failed (non-fatal): ${err.message}`)
     }
@@ -116,12 +115,7 @@ export async function runSaveDealContacts() {
 
   // Upsert deal contacts
   if (dealContactValues.length > 0) {
-    await executeSql(
-      apiUrl,
-      jwt,
-      biscuit,
-      dealContactsSql.upsert(schema, dealContactValues),
-    )
+    await executeSql(apiUrl, jwt, biscuit, dealContactsSql.upsert(schema, dealContactValues))
   }
 
   console.log(`[save-deal-contacts] ${dealContactValues.length} contacts saved (core + deal)`)

@@ -47,8 +47,7 @@ export async function runSaveEvals() {
     const category = sanitizeString(thread.category || '')
     const aiSummary = sanitizeString(thread.ai_summary || '')
     const isDeal = thread.is_deal ? 'true' : 'false'
-    const isLikelyScam =
-      (thread.category || '').toLowerCase() === 'likely_scam' ? 'true' : 'false'
+    const isLikelyScam = (thread.category || '').toLowerCase() === 'likely_scam' ? 'true' : 'false'
     const aiScore = typeof thread.ai_score === 'number' ? thread.ai_score : 0
     return `('${evalId}', '${threadId}', '', '${category}', '${aiSummary}', ${isDeal}, ${isLikelyScam}, ${aiScore}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
   })

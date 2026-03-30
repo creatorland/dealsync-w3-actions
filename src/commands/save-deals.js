@@ -78,8 +78,7 @@ export async function runSaveDeals() {
     const dealId = uuidv7()
     const dealName = sanitizeString(thread.deal_name || '')
     const dealType = sanitizeString(thread.deal_type || '')
-    const dealValue =
-      typeof thread.deal_value === 'string' ? parseFloat(thread.deal_value) || 0 : 0
+    const dealValue = typeof thread.deal_value === 'string' ? parseFloat(thread.deal_value) || 0 : 0
     const currency = sanitizeString(thread.currency || 'USD')
     const brand = thread.main_contact ? sanitizeString(thread.main_contact.company || '') : ''
     const category = sanitizeString(thread.category || '')

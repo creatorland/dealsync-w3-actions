@@ -257,9 +257,7 @@ describe('save-deal-contacts command', () => {
   it('should return 0 when no audit found', async () => {
     mockInputs()
 
-    fetchSpy
-      .mockResolvedValueOnce(authResponse())
-      .mockResolvedValueOnce(sxtResponse([]))
+    fetchSpy.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(sxtResponse([]))
 
     const result = await runSaveDealContacts()
 

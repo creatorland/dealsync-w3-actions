@@ -67,14 +67,27 @@ export async function runUpdateDealStates() {
 
   // Issue exactly 2 UPDATEs (one for deals, one for not_deals)
   if (dealEmailIds.length > 0) {
-    await executeSql(apiUrl, jwt, biscuit, dealStatesSql.updateStatusByIds(schema, dealEmailIds.map(id => `'${sanitizeId(id)}'`), 'deal'))
+    await executeSql(
+      apiUrl,
+      jwt,
+      biscuit,
+      dealStatesSql.updateStatusByIds(
+        schema,
+        dealEmailIds.map((id) => `'${sanitizeId(id)}'`),
+        'deal',
+      ),
+    )
   }
   if (notDealEmailIds.length > 0) {
     await executeSql(
       apiUrl,
       jwt,
       biscuit,
-      dealStatesSql.updateStatusByIds(schema, notDealEmailIds.map(id => `'${sanitizeId(id)}'`), 'not_deal'),
+      dealStatesSql.updateStatusByIds(
+        schema,
+        notDealEmailIds.map((id) => `'${sanitizeId(id)}'`),
+        'not_deal',
+      ),
     )
   }
 

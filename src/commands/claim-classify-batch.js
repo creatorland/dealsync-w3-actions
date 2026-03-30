@@ -55,7 +55,9 @@ export async function runClaimClassifyBatch() {
 
   // 6. No rows claimed — look for stuck batches
   console.log('[claim-classify-batch] no pending rows, checking for stuck batches')
-  const stuckRows = await exec(dealStatesSql.findStuckBatches(schema, STATUS.CLASSIFYING, 5, maxRetries))
+  const stuckRows = await exec(
+    dealStatesSql.findStuckBatches(schema, STATUS.CLASSIFYING, 5, maxRetries),
+  )
 
   if (stuckRows && stuckRows.length > 0) {
     const stuckBatchId = stuckRows[0].BATCH_ID

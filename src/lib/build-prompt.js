@@ -54,9 +54,7 @@ export function buildPrompt(emails, { systemOverride, userOverride, creatorEmail
 
   const systemPrompt = (systemOverride || systemTemplate).trim()
 
-  const creatorLine = creatorEmail
-    ? `Creator email: ${creatorEmail}\n\n`
-    : ''
+  const creatorLine = creatorEmail ? `Creator email: ${creatorEmail}\n\n` : ''
 
   const userPrompt = (userOverride || classificationInstructions)
     .replace('{{THREAD_DATA}}', creatorLine + threadData)

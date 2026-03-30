@@ -62,7 +62,9 @@ export async function runClaimFilterBatch() {
   // 6. No pending rows — look for stuck batches
   console.log(`[claim-filter-batch] no pending rows, checking for stuck batches`)
 
-  const stuckBatches = await exec(dealStatesSql.findStuckBatches(schema, STATUS.FILTERING, 5, maxRetries))
+  const stuckBatches = await exec(
+    dealStatesSql.findStuckBatches(schema, STATUS.FILTERING, 5, maxRetries),
+  )
 
   if (!stuckBatches || stuckBatches.length === 0) {
     const stuckFailed = await sweepStuckRows(exec, schema, {
