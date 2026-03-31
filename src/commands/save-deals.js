@@ -1,6 +1,6 @@
 import { v7 as uuidv7 } from 'uuid'
 import * as core from '@actions/core'
-import { sanitizeId, sanitizeString, sanitizeSchema, saveResults } from '../lib/queries.js'
+import { sanitizeId, sanitizeString, sanitizeSchema, readAuditThreads } from '../lib/constants.js'
 import { authenticate, executeSql } from '../lib/sxt-client.js'
 import { dealStates as dealStatesSql, deals as dealsSql } from '../lib/sql/index.js'
 
@@ -19,29 +19,16 @@ export async function runSaveDeals() {
   if (!batchId) throw new Error('batch-id is required')
 
   const jwt = await authenticate(authUrl, authSecret)
+  const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql)
 
-  // Read audit
-  const audits = await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    saveResults.getAuditByBatchId(schema, batchId),
-  )
-  if (audits.length === 0 || !audits[0].AI_EVALUATION) {
+  const threads = await readAuditThreads(exec, schema, batchId)
+  if (!threads) {
     console.log('[save-deals] no audit found — skipping')
     return { deals_created: 0 }
   }
 
-  const aiOutput = JSON.parse(audits[0].AI_EVALUATION)
-  const threads = aiOutput.threads || []
-
   // Need metadata to get userId per thread
-  const metadataRows = await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    dealStatesSql.selectDistinctThreadUsers(schema, batchId),
-  )
+  const metadataRows = await exec(dealStatesSql.selectDistinctThreadUsers(schema, batchId))
   const userByThread = {}
   for (const row of metadataRows) {
     userByThread[row.THREAD_ID] = row.USER_ID
@@ -62,7 +49,7 @@ export async function runSaveDeals() {
   // Batch DELETE non-deal threads (single query)
   if (notDealThreadIds.length > 0) {
     const quotedIds = notDealThreadIds.map((id) => `'${id}'`)
-    await executeSql(apiUrl, jwt, biscuit, dealsSql.deleteByThreadIds(schema, quotedIds))
+    await exec(dealsSql.deleteByThreadIds(schema, quotedIds))
     console.log(`[save-deals] deleted ${notDealThreadIds.length} non-deal threads (1 query)`)
   }
 
@@ -86,7 +73,7 @@ export async function runSaveDeals() {
     return `('${dealId}', '${userId}', '${threadId}', '', '${dealName}', '${dealType}', '${category}', ${dealValue}, '${currency}', '${brand}', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
   })
 
-  await executeSql(apiUrl, jwt, biscuit, dealsSql.upsert(schema, dealTuples))
+  await exec(dealsSql.upsert(schema, dealTuples))
 
   console.log(`[save-deals] ${dealThreads.length} deals upserted`)
   return { deals_created: dealThreads.length }

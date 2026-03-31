@@ -6,6 +6,7 @@
  * the items have been flushed (or rejects on flush error).
  */
 
+import { STATUS } from './constants.js'
 import {
   evaluations as evalSql,
   deals as dealsSql,
@@ -248,10 +249,10 @@ export class WriteBatcher {
           allNotDealIds.push(...item.notDealEmailIds)
         }
         if (allDealIds.length > 0) {
-          await this._executeSqlFn(dealStatesSql.updateStatusByIds(s, allDealIds, 'deal'))
+          await this._executeSqlFn(dealStatesSql.updateStatusByIds(s, allDealIds, STATUS.DEAL))
         }
         if (allNotDealIds.length > 0) {
-          await this._executeSqlFn(dealStatesSql.updateStatusByIds(s, allNotDealIds, 'not_deal'))
+          await this._executeSqlFn(dealStatesSql.updateStatusByIds(s, allNotDealIds, STATUS.NOT_DEAL))
         }
         break
       }

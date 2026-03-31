@@ -1,5 +1,5 @@
 /**
- * Email body sanitization for AI classification.
+ * Email body sanitization and header utilities for AI classification.
  *
  * Cleans raw email content before sending to the classifier:
  * 1. HTML → plaintext (preserves structure, strips tags)
@@ -11,6 +11,11 @@
 
 import { convert } from 'html-to-text'
 import EmailReplyParser from 'email-reply-parser'
+
+export function getHeader(email, name) {
+  const header = email.topLevelHeaders?.find((h) => h.name.toLowerCase() === name.toLowerCase())
+  return header?.value || ''
+}
 
 const MAX_BODY_CHARS = 3000 // Per email — keeps token usage reasonable for batches of 5
 

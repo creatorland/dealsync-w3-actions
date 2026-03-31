@@ -1,11 +1,7 @@
 import * as core from '@actions/core'
-import { sanitizeId, sanitizeString, sanitizeSchema, saveResults } from '../lib/queries.js'
+import { sanitizeId, sanitizeString, sanitizeSchema, toSqlNullable, readAuditThreads } from '../lib/constants.js'
 import { authenticate, executeSql } from '../lib/sxt-client.js'
 import { deals as dealsSql, contacts as contactsSql, dealContacts as dealContactsSql } from '../lib/sql/index.js'
-
-function toSqlNullable(s) {
-  return s ? `'${sanitizeString(s)}'` : 'NULL'
-}
 
 /**
  * Save deal contacts with two-table upsert pattern:
@@ -27,21 +23,14 @@ export async function runSaveDealContacts() {
   if (!batchId) throw new Error('batch-id is required')
 
   const jwt = await authenticate(authUrl, authSecret)
+  const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql)
 
-  // Read audit
-  const audits = await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    saveResults.getAuditByBatchId(schema, batchId),
-  )
-  if (audits.length === 0 || !audits[0].AI_EVALUATION) {
+  const threads = await readAuditThreads(exec, schema, batchId)
+  if (!threads) {
     console.log('[save-deal-contacts] no audit found — skipping')
     return { contacts_created: 0 }
   }
 
-  const aiOutput = JSON.parse(audits[0].AI_EVALUATION)
-  const threads = aiOutput.threads || []
   const dealThreads = threads.filter((t) => t.is_deal)
 
   if (dealThreads.length === 0) {
@@ -53,12 +42,7 @@ export async function runSaveDealContacts() {
   const dealThreadIds = dealThreads.map((t) => sanitizeId(t.thread_id))
   const quotedIds = dealThreadIds.map((id) => `'${id}'`)
 
-  const deals = await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    dealsSql.selectByThreadIds(schema, quotedIds),
-  )
+  const deals = await exec(dealsSql.selectByThreadIds(schema, quotedIds))
 
   const dealByThread = {}
   for (const row of deals) {
@@ -103,12 +87,7 @@ export async function runSaveDealContacts() {
   // Upsert core contacts (non-fatal — table may not exist yet)
   if (coreContactValues.length > 0) {
     try {
-      await executeSql(
-        apiUrl,
-        jwt,
-        biscuit,
-        contactsSql.upsert(coreSchema, coreContactValues),
-      )
+      await exec(contactsSql.upsert(coreSchema, coreContactValues))
     } catch (err) {
       console.error(`[save-deal-contacts] core contacts upsert failed (non-fatal): ${err.message}`)
     }
@@ -116,12 +95,7 @@ export async function runSaveDealContacts() {
 
   // Upsert deal contacts
   if (dealContactValues.length > 0) {
-    await executeSql(
-      apiUrl,
-      jwt,
-      biscuit,
-      dealContactsSql.upsert(schema, dealContactValues),
-    )
+    await exec(dealContactsSql.upsert(schema, dealContactValues))
   }
 
   console.log(`[save-deal-contacts] ${dealContactValues.length} contacts saved (core + deal)`)

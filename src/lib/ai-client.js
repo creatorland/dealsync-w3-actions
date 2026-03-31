@@ -1,7 +1,8 @@
+import { sleep, backoffMs } from './retry.js'
+
 // --- Constants ---
 export const AI_REQUEST_TIMEOUT_MS = 240000
 export const AI_RETRY_DELAY_MS = 2000
-export const AI_BACKOFF_MULTIPLIER = 2
 export const MAX_HTTP_RETRIES = 3
 export const MAX_TOKENS = 20480
 
@@ -69,14 +70,13 @@ export async function callModel(model, messages, { temperature = 0, apiUrl, apiK
           console.log(
             `[ai-client] ${model} rate limited (${rateLimitWaits}/${MAX_RATE_LIMIT_WAITS}), waiting ${retryAfter}ms`,
           )
-          await new Promise((r) => setTimeout(r, retryAfter))
+          await sleep(retryAfter)
           attempt-- // don't consume attempt
           continue
         }
 
         if (attempt < MAX_HTTP_RETRIES) {
-          const delay = AI_RETRY_DELAY_MS * Math.pow(AI_BACKOFF_MULTIPLIER, attempt - 1)
-          await new Promise((r) => setTimeout(r, delay))
+          await sleep(backoffMs(attempt - 1, { base: AI_RETRY_DELAY_MS }))
           continue
         }
         throw lastError
@@ -91,11 +91,11 @@ export async function callModel(model, messages, { temperature = 0, apiUrl, apiK
     } catch (err) {
       lastError = err
       if (attempt < MAX_HTTP_RETRIES) {
-        const delay = AI_RETRY_DELAY_MS * Math.pow(AI_BACKOFF_MULTIPLIER, attempt - 1)
+        const delay = backoffMs(attempt - 1, { base: AI_RETRY_DELAY_MS })
         console.log(
           `[ai-client] ${model} attempt ${attempt} failed: ${err.message}, retrying in ${delay}ms`,
         )
-        await new Promise((r) => setTimeout(r, delay))
+        await sleep(delay)
       }
     }
   }
