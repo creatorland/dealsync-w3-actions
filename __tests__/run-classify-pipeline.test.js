@@ -44,12 +44,14 @@ jest.unstable_mockModule('../src/lib/emails.js', () => ({
   fetchEmails: mockFetchEmails,
 }))
 
-// Mock ai-client
+// Mock ai
 const mockCallModel = jest.fn()
 const mockParseAndValidate = jest.fn()
-jest.unstable_mockModule('../src/lib/ai-client.js', () => ({
+const mockBuildPrompt = jest.fn()
+jest.unstable_mockModule('../src/lib/ai.js', () => ({
   callModel: mockCallModel,
   parseAndValidate: mockParseAndValidate,
+  buildPrompt: mockBuildPrompt,
   VALID_CATEGORIES: new Set([
     'new',
     'in_progress',
@@ -68,12 +70,6 @@ jest.unstable_mockModule('../src/lib/ai-client.js', () => ({
     'paid_placement',
     'other_business',
   ]),
-}))
-
-// Mock build-prompt
-const mockBuildPrompt = jest.fn()
-jest.unstable_mockModule('../src/lib/prompt.js', () => ({
-  buildPrompt: mockBuildPrompt,
 }))
 
 // Mock pipeline

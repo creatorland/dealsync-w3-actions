@@ -9,8 +9,7 @@ import {
   saveResults,
 } from '../lib/constants.js'
 import { authenticate, executeSql, acquireRateLimitToken } from '../lib/sxt-client.js'
-import { callModel, parseAndValidate } from '../lib/ai-client.js'
-import { buildPrompt } from '../lib/prompt.js'
+import { callModel, parseAndValidate, buildPrompt } from '../lib/ai.js'
 import { fetchEmails } from '../lib/emails.js'
 import { runPool, insertBatchEvent, sweepStuckRows, sweepOrphanedRows } from '../lib/pipeline.js'
 import { WriteBatcher } from '../lib/write-batcher.js'
