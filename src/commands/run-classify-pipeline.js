@@ -232,10 +232,10 @@ export async function runClassifyPipeline() {
       // Already-evaluated skip: threads with existing deals + no newer emails
       // ---------------------------------------------------------------
 
-      const fetchedThreadIds2 = [...new Set(allEmails.map((e) => e.threadId).filter(Boolean))]
+      const remainingThreadIds = [...new Set(allEmails.map((e) => e.threadId).filter(Boolean))]
 
-      if (fetchedThreadIds2.length > 0) {
-        const quotedFetched = fetchedThreadIds2.map((id) => `'${sanitizeId(id)}'`)
+      if (remainingThreadIds.length > 0) {
+        const quotedFetched = remainingThreadIds.map((id) => `'${sanitizeId(id)}'`)
         const existingDeals = await execNoRL(dealsSql.selectByThreadIds(schema, quotedFetched))
 
         if (existingDeals && existingDeals.length > 0) {
@@ -259,10 +259,14 @@ export async function runClassifyPipeline() {
             const threadEmails = emailsByThread[threadId]
             if (!threadEmails || threadEmails.length === 0) continue
 
-            const latestEmailDate = threadEmails.reduce((latest, e) => {
-              const d = new Date(e.date)
-              return d > latest ? d : latest
-            }, new Date(0))
+            const emailDates = threadEmails
+              .map((e) => new Date(e.date))
+              .filter((d) => !isNaN(d.getTime()))
+
+            // No valid dates — can't determine, classify normally
+            if (emailDates.length === 0) continue
+
+            const latestEmailDate = emailDates.reduce((latest, d) => (d > latest ? d : latest), new Date(0))
 
             if (latestEmailDate <= new Date(dealUpdatedAt)) {
               // All emails are older than the deal — skip classification

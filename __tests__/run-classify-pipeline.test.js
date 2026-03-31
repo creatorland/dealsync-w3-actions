@@ -269,6 +269,7 @@ describe('run-classify-pipeline command', () => {
         body: 'test email body',
       }))
       mockFetchEmails.mockResolvedValueOnce(emails)
+      mockExecuteSql.mockResolvedValueOnce([]) // selectByThreadIds -> no existing deals
       mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'sys', userPrompt: 'usr' })
       mockCallModel.mockResolvedValueOnce({ content: '[{"thread_id":"thread-1"}]' })
       mockParseAndValidate.mockReturnValueOnce(threads)
@@ -413,6 +414,7 @@ describe('run-classify-pipeline command', () => {
         body: 'test',
       }))
       mockFetchEmails.mockResolvedValueOnce(emails)
+      mockExecuteSql.mockResolvedValueOnce([]) // selectByThreadIds -> no existing deals
       mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'sys', userPrompt: 'usr' })
       mockCallModel.mockResolvedValueOnce({ content: '[]' })
       mockParseAndValidate.mockReturnValueOnce(threads)
@@ -462,6 +464,7 @@ describe('run-classify-pipeline command', () => {
       mockFetchEmails.mockResolvedValueOnce([
         { messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' },
       ])
+      mockExecuteSql.mockResolvedValueOnce([]) // selectByThreadIds -> no existing deals
       mockBuildPrompt.mockReturnValueOnce({
         systemPrompt: 'system-prompt',
         userPrompt: 'user-prompt',
@@ -535,6 +538,7 @@ describe('run-classify-pipeline command', () => {
       mockFetchEmails.mockResolvedValueOnce([
         { messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' },
       ])
+      mockExecuteSql.mockResolvedValueOnce([]) // selectByThreadIds -> no existing deals
       mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'sys', userPrompt: 'usr' })
 
       // Primary model fails completely
@@ -583,6 +587,7 @@ describe('run-classify-pipeline command', () => {
       mockFetchEmails.mockResolvedValueOnce([
         { messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' },
       ])
+      mockExecuteSql.mockResolvedValueOnce([]) // selectByThreadIds -> no existing deals
       mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'sys', userPrompt: 'usr' })
 
       // Primary model returns content but it can't be parsed
@@ -1174,6 +1179,7 @@ describe('run-classify-pipeline command', () => {
       mockFetchEmails.mockResolvedValueOnce([
         { messageId: 'msg-1', id: 'em-1', threadId: 'thread-xyz', body: 'hi' },
       ])
+      mockExecuteSql.mockResolvedValueOnce([]) // selectByThreadIds -> no existing deals
       mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'sys', userPrompt: 'usr' })
       mockCallModel.mockResolvedValueOnce({ content: '[]' })
       mockParseAndValidate.mockReturnValueOnce(threads)
@@ -1237,6 +1243,7 @@ describe('run-classify-pipeline command', () => {
       mockFetchEmails.mockResolvedValueOnce([
         { messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' },
       ])
+      mockExecuteSql.mockResolvedValueOnce([]) // selectByThreadIds -> no existing deals
       mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'sys', userPrompt: 'usr' })
       mockCallModel.mockResolvedValueOnce({ content: '[]' })
       mockParseAndValidate.mockReturnValueOnce(threads)
@@ -1495,6 +1502,7 @@ describe('run-classify-pipeline command', () => {
       mockFetchEmails.mockResolvedValueOnce([
         { messageId: 'msg-1', id: 'em-1', threadId: 'thread-1', body: 'hi' },
       ])
+      mockExecuteSql.mockResolvedValueOnce([]) // selectByThreadIds -> no existing deals
       mockBuildPrompt.mockReturnValueOnce({ systemPrompt: 'sys', userPrompt: 'usr' })
       mockCallModel.mockResolvedValueOnce({ content: '[]' })
       mockParseAndValidate.mockReturnValueOnce(threads)
