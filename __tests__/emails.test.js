@@ -23,7 +23,7 @@ afterEach(() => {
   jest.restoreAllMocks()
 })
 
-const { fetchEmails } = await import('../src/lib/email-client.js')
+const { fetchEmails } = await import('../src/lib/emails.js')
 const sxtClient = await import('../src/lib/sxt-client.js')
 
 // ---------------------------------------------------------------------------

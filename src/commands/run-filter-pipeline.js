@@ -3,8 +3,7 @@ import * as core from '@actions/core'
 import { sanitizeSchema, sanitizeId, STATUS } from '../lib/constants.js'
 import { runPool, insertBatchEvent, sweepStuckRows } from '../lib/pipeline.js'
 import { authenticate, executeSql, acquireRateLimitToken } from '../lib/sxt-client.js'
-import { isRejected } from '../lib/filter-rules.js'
-import { fetchEmails } from '../lib/email-client.js'
+import { isRejected, fetchEmails } from '../lib/emails.js'
 import { dealStates as dealStatesSql } from '../lib/sql/index.js'
 
 /**

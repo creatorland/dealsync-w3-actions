@@ -38,9 +38,9 @@ jest.unstable_mockModule('../src/lib/sxt-client.js', () => ({
   })),
 }))
 
-// Mock email-client
+// Mock emails
 const mockFetchEmails = jest.fn()
-jest.unstable_mockModule('../src/lib/email-client.js', () => ({
+jest.unstable_mockModule('../src/lib/emails.js', () => ({
   fetchEmails: mockFetchEmails,
 }))
 

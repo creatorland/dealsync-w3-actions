@@ -1,4 +1,4 @@
-import { getHeader, sanitizeEmailBody } from './email-sanitizer.js'
+import { getHeader, sanitizeEmailBody } from './emails.js'
 import systemTemplate from '../../prompts/system.md'
 import classificationInstructions from '../../prompts/user.md'
 
