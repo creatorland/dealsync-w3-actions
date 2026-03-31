@@ -72,7 +72,7 @@ jest.unstable_mockModule('../src/lib/ai-client.js', () => ({
 
 // Mock build-prompt
 const mockBuildPrompt = jest.fn()
-jest.unstable_mockModule('../src/lib/build-prompt.js', () => ({
+jest.unstable_mockModule('../src/lib/prompt.js', () => ({
   buildPrompt: mockBuildPrompt,
 }))
 

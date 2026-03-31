@@ -1,14 +1,10 @@
 import { v7 as uuidv7 } from 'uuid'
 import * as core from '@actions/core'
-import { buildPrompt } from '../lib/build-prompt.js'
-import {
-  callModel,
-  parseAndValidate,
-  VALID_CATEGORIES,
-  VALID_DEAL_TYPES,
-} from '../lib/ai-client.js'
-import { saveResults, sanitizeString, sanitizeSchema, sanitizeId } from '../lib/queries.js'
-import { authenticate, executeSql, withTimeout } from '../lib/sxt-client.js'
+import { buildPrompt } from '../lib/prompt.js'
+import { callModel, parseAndValidate } from '../lib/ai-client.js'
+import { saveResults, sanitizeString, sanitizeSchema, sanitizeId } from '../lib/constants.js'
+import { authenticate, executeSql } from '../lib/sxt-client.js'
+import { fetchEmails } from '../lib/email-client.js'
 import { dealStates as dealStatesSql } from '../lib/sql/index.js'
 
 /**
@@ -42,14 +38,10 @@ export async function runFetchAndClassify() {
   )
 
   const jwt = await authenticate(authUrl, authSecret)
+  const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql)
 
   // Check metadata exists
-  const metadataRows = await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    dealStatesSql.selectEmailsByBatch(schema, batchId),
-  )
+  const metadataRows = await exec(dealStatesSql.selectEmailsByBatch(schema, batchId))
 
   if (!metadataRows || metadataRows.length === 0) {
     console.log('[classify] no rows for batch (already completed?)')
@@ -59,12 +51,7 @@ export async function runFetchAndClassify() {
   console.log(`[classify] ${metadataRows.length} deal_states`)
 
   // Check for existing audit (checkpoint)
-  const existingAudit = await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    saveResults.getAuditByBatchId(schema, batchId),
-  )
+  const existingAudit = await exec(saveResults.getAuditByBatchId(schema, batchId))
 
   if (existingAudit.length > 0 && existingAudit[0].AI_EVALUATION) {
     console.log('[classify] audit exists — skipping AI call')
@@ -77,60 +64,16 @@ export async function runFetchAndClassify() {
   }
 
   // Fetch content
-  const userId = metadataRows[0].USER_ID
-  const syncStateId = metadataRows[0].SYNC_STATE_ID
   const messageIds = metadataRows.map((r) => r.MESSAGE_ID)
-
-  const CONTENT_FETCH_MAX_RETRIES = 3
-  const allEmails = []
   const metaByMessageId = new Map(metadataRows.map((r) => [r.MESSAGE_ID, r]))
-  for (let i = 0; i < messageIds.length; i += chunkSize) {
-    const chunk = messageIds.slice(i, i + chunkSize)
-    let fetched = false
-    for (let attempt = 0; attempt < CONTENT_FETCH_MAX_RETRIES && !fetched; attempt++) {
-      try {
-        const { signal, clear } = withTimeout(fetchTimeoutMs)
-        const resp = await fetch(`${contentFetcherUrl}/email-content/fetch`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            ...(syncStateId ? { syncStateId } : {}),
-            messageIds: chunk,
-          }),
-          signal,
-        })
-        clear()
-        if (resp.status === 429) {
-          const body = await resp.json().catch(() => ({}))
-          const retryAfter =
-            body.retryAfterMs || parseInt(body.message?.match(/\d+/)?.[0] || '30', 10) * 1000
-          console.log(
-            `[classify] content fetch 429, waiting ${retryAfter}ms (attempt ${attempt + 1}/${CONTENT_FETCH_MAX_RETRIES})`,
-          )
-          await new Promise((r) => setTimeout(r, retryAfter))
-          continue
-        }
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
-        const result = await resp.json()
-        const emails = result.data || result
-        for (const email of emails) {
-          const meta = metaByMessageId.get(email.messageId)
-          if (meta) {
-            email.id = meta.EMAIL_METADATA_ID
-            email.threadId = meta.THREAD_ID
-            if (meta.PREVIOUS_AI_SUMMARY) email.previousAiSummary = meta.PREVIOUS_AI_SUMMARY
-          }
-          allEmails.push(email)
-        }
-        fetched = true
-      } catch (err) {
-        console.log(`[classify] content fetch failed: ${err.message}`)
-      }
-    }
-  }
 
-  if (allEmails.length === 0) throw new Error('No email content fetched')
+  const allEmails = await fetchEmails(messageIds, metaByMessageId, {
+    contentFetcherUrl,
+    userId: metadataRows[0].USER_ID,
+    syncStateId: metadataRows[0].SYNC_STATE_ID,
+    chunkSize,
+    fetchTimeoutMs,
+  })
 
   // Build prompt
   const { systemPrompt, userPrompt } = buildPrompt(allEmails)
@@ -219,22 +162,17 @@ export async function runFetchAndClassify() {
   const auditId = uuidv7()
   const evaluation = sanitizeString(JSON.stringify(aiOutput).substring(0, 6400))
   try {
-    await executeSql(
-      apiUrl,
-      jwt,
-      biscuit,
-      saveResults.insertAudit(schema, {
-        id: auditId,
-        batchId,
-        threadCount: threads.length,
-        emailCount: metadataRows.length,
-        cost: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        model: modelUsed,
-        evaluation,
-      }),
-    )
+    await exec(saveResults.insertAudit(schema, {
+      id: auditId,
+      batchId,
+      threadCount: threads.length,
+      emailCount: metadataRows.length,
+      cost: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      model: modelUsed,
+      evaluation,
+    }))
     console.log(`[classify] audit saved: ${auditId} (model: ${modelUsed})`)
   } catch (err) {
     if (

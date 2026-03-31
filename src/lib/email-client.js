@@ -7,10 +7,9 @@
  */
 
 import { withTimeout } from './sxt-client.js'
+import { sleep, backoffMs } from './retry.js'
 
 const DEFAULT_MAX_RETRIES = 3
-const BACKOFF_BASE_MS = 1000
-const BACKOFF_MULTIPLIER = 2
 
 /**
  * Fetch email content from the content-fetcher service in chunks,
@@ -72,7 +71,7 @@ export async function fetchEmails(messageIds, metaByMessageId, opts) {
           // Handle 429 rate limiting
           if (resp.status === 429) {
             const retryBody = await resp.json().catch(() => ({}))
-            const retryAfterMs = retryBody.retryAfterMs || backoffMs(attempt)
+            const retryAfterMs = retryBody.retryAfterMs || backoffMs(attempt, { base: 1000 })
             console.log(
               `[email-client] 429 rate limited, waiting ${retryAfterMs}ms ` +
                 `(chunk ${chunkIndex}, attempt ${attempt + 1}/${maxRetries})`,
@@ -111,7 +110,7 @@ export async function fetchEmails(messageIds, metaByMessageId, opts) {
 
         // If not the last attempt, wait with exponential backoff before retry
         if (attempt < maxRetries - 1) {
-          const waitMs = backoffMs(attempt)
+          const waitMs = backoffMs(attempt, { base: 1000 })
           await sleep(waitMs)
         }
       }
@@ -123,12 +122,4 @@ export async function fetchEmails(messageIds, metaByMessageId, opts) {
   }
 
   return allEmails
-}
-
-function backoffMs(attempt) {
-  return BACKOFF_BASE_MS * Math.pow(BACKOFF_MULTIPLIER, attempt)
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }

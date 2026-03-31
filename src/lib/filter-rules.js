@@ -1,4 +1,4 @@
-import { getHeader } from './email-utils.js'
+import { getHeader } from './email-sanitizer.js'
 import blockedDomains from '../../config/blocked-domains.json'
 import blockedPrefixes from '../../config/blocked-prefixes.json'
 import automatedSubjects from '../../config/automated-subjects.json'

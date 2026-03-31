@@ -1,6 +1,6 @@
 import * as core from '@actions/core'
 import { authenticate, executeSql } from '../lib/sxt-client.js'
-import { sanitizeSchema } from '../lib/queries.js'
+import { sanitizeSchema } from '../lib/constants.js'
 
 /**
  * Standalone SxT query/execute command.

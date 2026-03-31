@@ -1,6 +1,6 @@
 import { v7 as uuidv7 } from 'uuid'
 import * as core from '@actions/core'
-import { STATUS, sanitizeSchema } from '../lib/queries.js'
+import { STATUS, sanitizeSchema } from '../lib/constants.js'
 import { authenticate, executeSql } from '../lib/sxt-client.js'
 import { insertBatchEvent, sweepStuckRows, sweepOrphanedRows } from '../lib/pipeline.js'
 import { dealStates as dealStatesSql } from '../lib/sql/index.js'

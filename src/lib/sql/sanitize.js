@@ -1,5 +1,5 @@
 // SQL sanitization utilities.
-// Extracted to break circular dependency between queries.js and sql builders.
+// Extracted to break circular dependency between constants.js and sql builders.
 
 export function sanitizeId(id) {
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
@@ -18,6 +18,10 @@ export function sanitizeString(s) {
 
 export function toSqlIdList(ids) {
   return ids.map((id) => `'${sanitizeId(id)}'`).join(',')
+}
+
+export function toSqlNullable(s) {
+  return s ? `'${sanitizeString(s)}'` : 'NULL'
 }
 
 export function sanitizeSchema(schema) {
