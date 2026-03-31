@@ -1,10 +1,9 @@
 import { v7 as uuidv7 } from 'uuid'
 import * as core from '@actions/core'
-import { sanitizeSchema, sanitizeId, STATUS } from '../lib/constants.js'
 import { runPool, insertBatchEvent, sweepStuckRows } from '../lib/pipeline.js'
 import { authenticate, executeSql, acquireRateLimitToken } from '../lib/db.js'
 import { isRejected, fetchEmails } from '../lib/emails.js'
-import { dealStates as dealStatesSql } from '../lib/sql/index.js'
+import { sanitizeSchema, sanitizeId, STATUS, dealStates as dealStatesSql } from '../lib/sql/index.js'
 
 /**
  * Orchestrator that claims and processes filter batches concurrently

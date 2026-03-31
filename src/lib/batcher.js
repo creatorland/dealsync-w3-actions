@@ -6,8 +6,8 @@
  * the items have been flushed (or rejects on flush error).
  */
 
-import { STATUS } from './constants.js'
 import {
+  STATUS,
   evaluations as evalSql,
   deals as dealsSql,
   dealContacts as dealContactsSql,

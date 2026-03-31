@@ -27258,93 +27258,6 @@ function requireCore () {
 
 var coreExports = requireCore();
 
-// SQL sanitization utilities.
-// Extracted to break circular dependency between constants.js and sql builders.
-
-function sanitizeId(id) {
-  if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
-    throw new Error(`Invalid ID format: ${id}`)
-  }
-  return id
-}
-
-function sanitizeString(s) {
-  return (s || '')
-    .replace(/[\u2018\u2019\u201A\u201B]/g, "'") // curly single quotes → straight
-    .replace(/[\u201C\u201D\u201E\u201F]/g, '"') // curly double quotes → straight
-    .replace(/'/g, "''") // escape single quotes for SQL
-    .replace(/\\/g, '\\\\') // escape backslashes
-}
-
-function toSqlNullable(s) {
-  return s ? `'${sanitizeString(s)}'` : 'NULL'
-}
-
-function sanitizeSchema(schema) {
-  if (!/^[a-zA-Z0-9_]+$/.test(schema)) {
-    throw new Error(`Invalid schema: ${schema}`)
-  }
-  return schema
-}
-
-const audits = {
-  selectByBatch: (schema, batchId) => {
-    const s = sanitizeSchema(schema);
-    const bid = sanitizeId(batchId);
-    return `SELECT AI_EVALUATION FROM ${s}.AI_EVALUATION_AUDITS WHERE BATCH_ID = '${bid}'`
-  },
-
-  insert: (
-    schema,
-    { id, batchId, threadCount, emailCount, cost, inputTokens, outputTokens, model, evaluation },
-  ) => {
-    const s = sanitizeSchema(schema);
-    const safeId = sanitizeId(id);
-    const safeBid = sanitizeId(batchId);
-    const safeModel = sanitizeString(model);
-    const safeEval = sanitizeString(evaluation);
-    return `INSERT INTO ${s}.AI_EVALUATION_AUDITS (ID, BATCH_ID, THREAD_COUNT, EMAIL_COUNT, INFERENCE_COST, INPUT_TOKENS, OUTPUT_TOKENS, MODEL_USED, AI_EVALUATION, CREATED_AT) VALUES ('${safeId}', '${safeBid}', ${Number(threadCount)}, ${Number(emailCount)}, ${Number(cost)}, ${Number(inputTokens)}, ${Number(outputTokens)}, '${safeModel}', '${safeEval}', CURRENT_TIMESTAMP)`
-  },
-};
-
-/**
- * Shared SQL queries for Dealsync W3 workflow actions.
- *
- * All queries target DEAL_STATES (not EMAIL_METADATA).
- * All column names UPPERCASE (SxT convention).
- * Schema is passed as a parameter — never hardcoded.
- * IDs must be sanitized before interpolation.
- *
- * Status-based state machine:
- *   pending → filtering → pending_classification → classifying → deal | not_deal
- *   filtering → filter_rejected (terminal)
- *   filtering | classifying | pending_classification → failed (terminal: dead-letter, stuck sweep, orphan sweep)
- */
-
-
-// ============================================================
-// STATUS CONSTANTS
-// ============================================================
-
-const STATUS = {
-  FILTERING: 'filtering',
-  PENDING_CLASSIFICATION: 'pending_classification',
-  CLASSIFYING: 'classifying',
-  DEAL: 'deal',
-  NOT_DEAL: 'not_deal',
-  FILTER_REJECTED: 'filter_rejected',
-  FAILED: 'failed',
-};
-
-// ============================================================
-// SAVE RESULTS QUERIES (detection pipeline DML)
-// ============================================================
-
-const saveResults = {
-  getAuditByBatchId: (schema, batchId) => audits.selectByBatch(schema, batchId),
-  insertAudit: (schema, params) => audits.insert(schema, params),
-};
-
 // Shared retry utilities: sleep + exponential backoff.
 
 function sleep(ms) {
@@ -27583,6 +27496,35 @@ async function executeSql(apiUrl, jwt, biscuit, sql, { skipRateLimit = false } =
   throw new Error('SxT query failed after all retries')
 }
 
+// SQL sanitization utilities.
+// Extracted to break circular dependency between constants.js and sql builders.
+
+function sanitizeId(id) {
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+    throw new Error(`Invalid ID format: ${id}`)
+  }
+  return id
+}
+
+function sanitizeString(s) {
+  return (s || '')
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'") // curly single quotes → straight
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"') // curly double quotes → straight
+    .replace(/'/g, "''") // escape single quotes for SQL
+    .replace(/\\/g, '\\\\') // escape backslashes
+}
+
+function toSqlNullable(s) {
+  return s ? `'${sanitizeString(s)}'` : 'NULL'
+}
+
+function sanitizeSchema(schema) {
+  if (!/^[a-zA-Z0-9_]+$/.test(schema)) {
+    throw new Error(`Invalid schema: ${schema}`)
+  }
+  return schema
+}
+
 // src/lib/sql/deal-states.js
 //
 // DEAL_STATES table SQL builders.
@@ -27595,6 +27537,16 @@ async function executeSql(apiUrl, jwt, biscuit, sql, { skipRateLimit = false } =
 //   - ON CONFLICT (...) DO UPDATE supported
 //   - LEFT JOIN on single column only
 
+
+const STATUS = {
+  FILTERING: 'filtering',
+  PENDING_CLASSIFICATION: 'pending_classification',
+  CLASSIFYING: 'classifying',
+  DEAL: 'deal',
+  NOT_DEAL: 'not_deal',
+  FILTER_REJECTED: 'filter_rejected',
+  FAILED: 'failed',
+};
 
 const dealStates = {
   claimFilterBatch: (schema, batchId, batchSize) => {
@@ -27704,6 +27656,26 @@ const batchEvents = {
   upsertBulk: (schema, valueTuples) => {
     const s = sanitizeSchema(schema);
     return `INSERT INTO ${s}.BATCH_EVENTS (TRIGGER_HASH, BATCH_ID, BATCH_TYPE, EVENT_TYPE, CREATED_AT) VALUES ${valueTuples.join(', ')} ON CONFLICT (TRIGGER_HASH) DO UPDATE SET EVENT_TYPE = EXCLUDED.EVENT_TYPE, CREATED_AT = CURRENT_TIMESTAMP`
+  },
+};
+
+const audits = {
+  selectByBatch: (schema, batchId) => {
+    const s = sanitizeSchema(schema);
+    const bid = sanitizeId(batchId);
+    return `SELECT AI_EVALUATION FROM ${s}.AI_EVALUATION_AUDITS WHERE BATCH_ID = '${bid}'`
+  },
+
+  insert: (
+    schema,
+    { id, batchId, threadCount, emailCount, cost, inputTokens, outputTokens, model, evaluation },
+  ) => {
+    const s = sanitizeSchema(schema);
+    const safeId = sanitizeId(id);
+    const safeBid = sanitizeId(batchId);
+    const safeModel = sanitizeString(model);
+    const safeEval = sanitizeString(evaluation);
+    return `INSERT INTO ${s}.AI_EVALUATION_AUDITS (ID, BATCH_ID, THREAD_COUNT, EMAIL_COUNT, INFERENCE_COST, INPUT_TOKENS, OUTPUT_TOKENS, MODEL_USED, AI_EVALUATION, CREATED_AT) VALUES ('${safeId}', '${safeBid}', ${Number(threadCount)}, ${Number(emailCount)}, ${Number(cost)}, ${Number(inputTokens)}, ${Number(outputTokens)}, '${safeModel}', '${safeEval}', CURRENT_TIMESTAMP)`
   },
 };
 
@@ -38738,7 +38710,7 @@ async function runClassifyPipeline() {
 
     let threads = null;
 
-    const existingAudit = await execNoRL(saveResults.getAuditByBatchId(schema, batchId));
+    const existingAudit = await execNoRL(audits.selectByBatch(schema, batchId));
 
     if (existingAudit && existingAudit.length > 0 && existingAudit[0].AI_EVALUATION) {
       try {
@@ -38988,7 +38960,7 @@ async function runClassifyPipeline() {
       const evaluation = sanitizeString(JSON.stringify(aiOutput));
       try {
         await execNoRL(
-          saveResults.insertAudit(schema, {
+          audits.insert(schema, {
             id: auditId,
             batchId,
             threadCount: threads.length,

@@ -1,7 +1,6 @@
 import * as core from '@actions/core'
-import { sanitizeSchema } from '../lib/constants.js'
 import { authenticate, executeSql } from '../lib/db.js'
-import { dealStates as dealStatesSql } from '../lib/sql/index.js'
+import { sanitizeSchema, dealStates as dealStatesSql } from '../lib/sql/index.js'
 
 /**
  * Sync email_metadata into deal_states — insert missing rows with status='pending'.

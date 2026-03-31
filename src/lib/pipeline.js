@@ -5,9 +5,14 @@
 
 import { v7 as uuidv7 } from 'uuid'
 import * as core from '@actions/core'
-import { sanitizeId, sanitizeSchema, STATUS } from './constants.js'
 import { sleep, backoffMs } from './retry.js'
-import { dealStates as dealStatesSql, batchEvents as batchEventsSql } from './sql/index.js'
+import {
+  sanitizeId,
+  sanitizeSchema,
+  STATUS,
+  dealStates as dealStatesSql,
+  batchEvents as batchEventsSql,
+} from './sql/index.js'
 
 /**
  * Concurrency pool that claims and processes batches.

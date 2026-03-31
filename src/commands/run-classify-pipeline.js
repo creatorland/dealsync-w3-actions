@@ -1,20 +1,18 @@
 import { v7 as uuidv7 } from 'uuid'
 import * as core from '@actions/core'
-import {
-  sanitizeSchema,
-  sanitizeId,
-  sanitizeString,
-  toSqlNullable,
-  STATUS,
-  saveResults,
-} from '../lib/constants.js'
 import { authenticate, executeSql, acquireRateLimitToken } from '../lib/db.js'
 import { callModel, parseAndValidate, buildPrompt } from '../lib/ai.js'
 import { fetchEmails } from '../lib/emails.js'
 import { runPool, insertBatchEvent, sweepStuckRows, sweepOrphanedRows } from '../lib/pipeline.js'
 import { WriteBatcher } from '../lib/batcher.js'
 import {
+  sanitizeSchema,
+  sanitizeId,
+  sanitizeString,
+  toSqlNullable,
+  STATUS,
   dealStates as dealStatesSql,
+  audits as auditsSql,
   evaluations as evalSql,
   deals as dealsSql,
 } from '../lib/sql/index.js'
@@ -151,7 +149,7 @@ export async function runClassifyPipeline() {
 
     let threads = null
 
-    const existingAudit = await execNoRL(saveResults.getAuditByBatchId(schema, batchId))
+    const existingAudit = await execNoRL(auditsSql.selectByBatch(schema, batchId))
 
     if (existingAudit && existingAudit.length > 0 && existingAudit[0].AI_EVALUATION) {
       try {
@@ -401,7 +399,7 @@ export async function runClassifyPipeline() {
       const evaluation = sanitizeString(JSON.stringify(aiOutput))
       try {
         await execNoRL(
-          saveResults.insertAudit(schema, {
+          auditsSql.insert(schema, {
             id: auditId,
             batchId,
             threadCount: threads.length,
