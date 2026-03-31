@@ -5,7 +5,8 @@
 
 import { v7 as uuidv7 } from 'uuid'
 import * as core from '@actions/core'
-import { sanitizeId, sanitizeSchema, STATUS } from './queries.js'
+import { sanitizeId, sanitizeSchema, STATUS } from './constants.js'
+import { sleep, backoffMs } from './retry.js'
 import { dealStates as dealStatesSql, batchEvents as batchEventsSql } from './sql/index.js'
 
 /**
@@ -55,8 +56,7 @@ export async function runPool(claimFn, workerFn, { maxConcurrent, maxRetries, on
             await deadLetter(batch, 'after max retries', currentAttempt)
             return
           }
-          const delay = Math.min(2000 * Math.pow(2, currentAttempt - 1), 30000)
-          await new Promise((r) => setTimeout(r, delay))
+          await sleep(backoffMs(currentAttempt - 1, { max: 30000 }))
         }
       }
     })()

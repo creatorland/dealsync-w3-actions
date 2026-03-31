@@ -1,5 +1,5 @@
 import * as core from '@actions/core'
-import { saveResults, sanitizeId, sanitizeSchema } from '../lib/queries.js'
+import { readAuditThreads, sanitizeId, sanitizeSchema, STATUS } from '../lib/constants.js'
 import { authenticate, executeSql } from '../lib/sxt-client.js'
 import { dealStates as dealStatesSql } from '../lib/sql/index.js'
 
@@ -18,29 +18,16 @@ export async function runUpdateDealStates() {
   if (!batchId) throw new Error('batch-id is required')
 
   const jwt = await authenticate(authUrl, authSecret)
+  const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql)
 
-  // Read audit
-  const audits = await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    saveResults.getAuditByBatchId(schema, batchId),
-  )
-  if (audits.length === 0 || !audits[0].AI_EVALUATION) {
+  const threads = await readAuditThreads(exec, schema, batchId)
+  if (!threads) {
     console.log('[update-states] no audit found — skipping')
     return { deal: 0, not_deal: 0 }
   }
 
-  const aiOutput = JSON.parse(audits[0].AI_EVALUATION)
-  const threads = aiOutput.threads || []
-
   // Get metadata to map thread → email_metadata_ids (by batch_id)
-  const metadataRows = await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    dealStatesSql.selectEmailAndThreadIdsByBatch(schema, batchId),
-  )
+  const metadataRows = await exec(dealStatesSql.selectEmailAndThreadIdsByBatch(schema, batchId))
 
   const metadataByThread = {}
   for (const row of metadataRows) {
@@ -67,15 +54,10 @@ export async function runUpdateDealStates() {
 
   // Issue exactly 2 UPDATEs (one for deals, one for not_deals)
   if (dealEmailIds.length > 0) {
-    await executeSql(apiUrl, jwt, biscuit, dealStatesSql.updateStatusByIds(schema, dealEmailIds.map(id => `'${sanitizeId(id)}'`), 'deal'))
+    await exec(dealStatesSql.updateStatusByIds(schema, dealEmailIds.map(id => `'${sanitizeId(id)}'`), STATUS.DEAL))
   }
   if (notDealEmailIds.length > 0) {
-    await executeSql(
-      apiUrl,
-      jwt,
-      biscuit,
-      dealStatesSql.updateStatusByIds(schema, notDealEmailIds.map(id => `'${sanitizeId(id)}'`), 'not_deal'),
-    )
+    await exec(dealStatesSql.updateStatusByIds(schema, notDealEmailIds.map(id => `'${sanitizeId(id)}'`), STATUS.NOT_DEAL))
   }
 
   const queries = (dealEmailIds.length > 0 ? 1 : 0) + (notDealEmailIds.length > 0 ? 1 : 0)

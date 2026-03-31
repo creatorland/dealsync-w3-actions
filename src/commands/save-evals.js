@@ -1,6 +1,6 @@
 import { v7 as uuidv7 } from 'uuid'
 import * as core from '@actions/core'
-import { saveResults, sanitizeId, sanitizeString, sanitizeSchema } from '../lib/queries.js'
+import { readAuditThreads, sanitizeId, sanitizeString, sanitizeSchema } from '../lib/constants.js'
 import { authenticate, executeSql } from '../lib/sxt-client.js'
 import { evaluations as evalSql } from '../lib/sql/index.js'
 
@@ -19,21 +19,13 @@ export async function runSaveEvals() {
   if (!batchId) throw new Error('batch-id is required')
 
   const jwt = await authenticate(authUrl, authSecret)
+  const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql)
 
-  // Read audit
-  const audits = await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    saveResults.getAuditByBatchId(schema, batchId),
-  )
-  if (audits.length === 0 || !audits[0].AI_EVALUATION) {
+  const threads = await readAuditThreads(exec, schema, batchId)
+  if (!threads) {
     console.log('[save-evals] no audit found — skipping')
     return { upserted: 0 }
   }
-
-  const aiOutput = JSON.parse(audits[0].AI_EVALUATION)
-  const threads = aiOutput.threads || []
 
   if (threads.length === 0) {
     console.log('[save-evals] no threads in audit')
@@ -53,7 +45,7 @@ export async function runSaveEvals() {
     return `('${evalId}', '${threadId}', '', '${category}', '${aiSummary}', ${isDeal}, ${isLikelyScam}, ${aiScore}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
   })
 
-  await executeSql(apiUrl, jwt, biscuit, evalSql.upsert(schema, valueTuples))
+  await exec(evalSql.upsert(schema, valueTuples))
 
   console.log(`[save-evals] upserted ${threads.length} thread evaluations (1 query)`)
   return { upserted: threads.length, total: threads.length }

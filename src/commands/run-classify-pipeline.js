@@ -1,17 +1,13 @@
 import { v7 as uuidv7 } from 'uuid'
 import * as core from '@actions/core'
-import { sanitizeSchema, sanitizeId, sanitizeString, STATUS, saveResults } from '../lib/queries.js'
+import { sanitizeSchema, sanitizeId, sanitizeString, toSqlNullable, STATUS, saveResults } from '../lib/constants.js'
 import { authenticate, executeSql, acquireRateLimitToken } from '../lib/sxt-client.js'
 import { callModel, parseAndValidate } from '../lib/ai-client.js'
-import { buildPrompt } from '../lib/build-prompt.js'
+import { buildPrompt } from '../lib/prompt.js'
 import { fetchEmails } from '../lib/email-client.js'
 import { runPool, insertBatchEvent, sweepStuckRows, sweepOrphanedRows } from '../lib/pipeline.js'
 import { WriteBatcher } from '../lib/write-batcher.js'
 import { dealStates as dealStatesSql, evaluations as evalSql } from '../lib/sql/index.js'
-
-function toSqlNullable(s) {
-  return s ? `'${sanitizeString(s)}'` : 'NULL'
-}
 
 /**
  * Orchestrator that claims and processes classify batches concurrently,
@@ -218,14 +214,14 @@ export async function runClassifyPipeline() {
 
         if (unfetchableDealIds.length > 0) {
           const quotedDealIds = unfetchableDealIds.map((id) => `'${sanitizeId(id)}'`)
-          await execNoRL(dealStatesSql.updateStatusByIds(schema, quotedDealIds, 'deal'))
+          await execNoRL(dealStatesSql.updateStatusByIds(schema, quotedDealIds, STATUS.DEAL))
           console.log(
             `[run-classify-pipeline] ${unfetchableDealIds.length} unfetchable rows → deal (previous eval)`,
           )
         }
         if (unfetchableNotDealIds.length > 0) {
           const quotedNotDealIds = unfetchableNotDealIds.map((id) => `'${sanitizeId(id)}'`)
-          await execNoRL(dealStatesSql.updateStatusByIds(schema, quotedNotDealIds, 'not_deal'))
+          await execNoRL(dealStatesSql.updateStatusByIds(schema, quotedNotDealIds, STATUS.NOT_DEAL))
           console.log(
             `[run-classify-pipeline] ${unfetchableNotDealIds.length} unfetchable rows → not_deal`,
           )
@@ -512,7 +508,7 @@ export async function runClassifyPipeline() {
     for (const [threadId, threadRows] of Object.entries(metadataByThread)) {
       if (classifiedThreadIds.has(threadId)) continue
       // Already handled by unfetchable logic earlier
-      if (threadRows.every((r) => r.STATUS === 'deal' || r.STATUS === 'not_deal')) continue
+      if (threadRows.every((r) => r.STATUS === STATUS.DEAL || r.STATUS === STATUS.NOT_DEAL)) continue
 
       const emailIds = threadRows.map((r) => r.EMAIL_METADATA_ID)
       // Check if any row has a previous eval indicating deal
@@ -533,11 +529,11 @@ export async function runClassifyPipeline() {
     // Write state updates directly (not through batcher) to ensure they commit
     if (dealEmailIds.length > 0) {
       const quotedIds = dealEmailIds.map((id) => `'${sanitizeId(id)}'`)
-      await execNoRL(dealStatesSql.updateStatusByIds(schema, quotedIds, 'deal'))
+      await execNoRL(dealStatesSql.updateStatusByIds(schema, quotedIds, STATUS.DEAL))
     }
     if (notDealEmailIds.length > 0) {
       const quotedNDIds = notDealEmailIds.map((id) => `'${sanitizeId(id)}'`)
-      await execNoRL(dealStatesSql.updateStatusByIds(schema, quotedNDIds, 'not_deal'))
+      await execNoRL(dealStatesSql.updateStatusByIds(schema, quotedNDIds, STATUS.NOT_DEAL))
     }
 
     console.log(

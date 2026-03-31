@@ -15,7 +15,7 @@
 import { audits } from './sql/audits.js'
 
 // Re-export sanitization utilities from their canonical location.
-export { sanitizeId, sanitizeString, toSqlIdList, sanitizeSchema } from './sql/sanitize.js'
+export { sanitizeId, sanitizeString, toSqlIdList, toSqlNullable, sanitizeSchema } from './sql/sanitize.js'
 
 // ============================================================
 // STATUS CONSTANTS
@@ -39,4 +39,15 @@ export const STATUS = {
 export const saveResults = {
   getAuditByBatchId: (schema, batchId) => audits.selectByBatch(schema, batchId),
   insertAudit: (schema, params) => audits.insert(schema, params),
+}
+
+/**
+ * Fetch and parse audit threads for a batch.
+ * Returns the threads array, or null if no audit exists.
+ */
+export async function readAuditThreads(executeSqlFn, schema, batchId) {
+  const rows = await executeSqlFn(saveResults.getAuditByBatchId(schema, batchId))
+  if (!rows || rows.length === 0 || !rows[0].AI_EVALUATION) return null
+  const aiOutput = JSON.parse(rows[0].AI_EVALUATION)
+  return aiOutput.threads || []
 }

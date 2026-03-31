@@ -12,6 +12,7 @@
  */
 
 import * as core from '@actions/core'
+import { sleep, backoffMs } from './retry.js'
 
 const SQL_TIMEOUT_MS = 120000
 const AUTH_TIMEOUT_MS = 30000
@@ -19,16 +20,6 @@ const MAX_RETRIES = 6
 
 let cachedJwt = null
 let reauthPromise = null
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms))
-}
-
-function backoff(attempt, base = 2000, max = 10000) {
-  const delay = Math.min(base * Math.pow(2, attempt), max)
-  const jitter = Math.random() * delay * 0.5
-  return Math.round(delay + jitter)
-}
 
 function withTimeout(ms = SQL_TIMEOUT_MS) {
   const controller = new AbortController()
@@ -61,7 +52,7 @@ export async function authenticate(authUrl, authSecret, badToken) {
       }
     } catch (err) {
       if (attempt < MAX_RETRIES - 1) {
-        const delay = backoff(attempt)
+        const delay = backoffMs(attempt, { jitter: true })
         console.log(
           `[sxt-client] Auth failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${err.message}, retrying in ${delay}ms`,
         )
@@ -108,7 +99,7 @@ export async function acquireRateLimitToken(tokens = 1) {
 
       if (!resp.ok && resp.status !== 429) {
         errors++
-        const delay = backoff(errors)
+        const delay = backoffMs(errors, { jitter: true })
         console.log(
           `[sxt-client] Rate limiter HTTP ${resp.status}, error ${errors}/${MAX_ERRORS}, retrying in ${delay}ms`,
         )
@@ -125,11 +116,11 @@ export async function acquireRateLimitToken(tokens = 1) {
         console.log('[sxt-client] Waiting for rate limit token...')
         waiting = true
       }
-      const waitMs = data.retryAfterMs || backoff(denials)
+      const waitMs = data.retryAfterMs || backoffMs(denials, { jitter: true })
       await sleep(waitMs)
     } catch (err) {
       errors++
-      const delay = backoff(errors)
+      const delay = backoffMs(errors, { jitter: true })
       console.log(
         `[sxt-client] Rate limiter error: ${err.message}, error ${errors}/${MAX_ERRORS}, retrying in ${delay}ms`,
       )
@@ -196,7 +187,7 @@ export async function executeSql(apiUrl, jwt, biscuit, sql, { skipRateLimit = fa
 
       if (resp.status === 401) {
         clear()
-        const delay = backoff(attempt)
+        const delay = backoffMs(attempt, { jitter: true })
         console.log(
           `[sxt-client] 401 received (attempt ${attempt + 1}/${MAX_RETRIES}), re-authenticating, backoff ${delay}ms`,
         )
@@ -215,7 +206,7 @@ export async function executeSql(apiUrl, jwt, biscuit, sql, { skipRateLimit = fa
       if (err.message.startsWith('SxT ')) throw err // Non-retryable SxT error
 
       if (attempt < MAX_RETRIES - 1) {
-        const delay = backoff(attempt)
+        const delay = backoffMs(attempt, { jitter: true })
         console.log(
           `[sxt-client] SQL query failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${err.message}, retrying in ${delay}ms`,
         )
