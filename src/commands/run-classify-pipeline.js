@@ -7,7 +7,7 @@ import { buildPrompt } from '../lib/prompt.js'
 import { fetchEmails } from '../lib/email-client.js'
 import { runPool, insertBatchEvent, sweepStuckRows, sweepOrphanedRows } from '../lib/pipeline.js'
 import { WriteBatcher } from '../lib/write-batcher.js'
-import { dealStates as dealStatesSql, evaluations as evalSql } from '../lib/sql/index.js'
+import { dealStates as dealStatesSql, evaluations as evalSql, deals as dealsSql } from '../lib/sql/index.js'
 
 /**
  * Orchestrator that claims and processes classify batches concurrently,
@@ -225,6 +225,62 @@ export async function runClassifyPipeline() {
           console.log(
             `[run-classify-pipeline] ${unfetchableNotDealIds.length} unfetchable rows → not_deal`,
           )
+        }
+      }
+
+      // ---------------------------------------------------------------
+      // Already-evaluated skip: threads with existing deals + no newer emails
+      // ---------------------------------------------------------------
+
+      const fetchedThreadIds2 = [...new Set(allEmails.map((e) => e.threadId).filter(Boolean))]
+
+      if (fetchedThreadIds2.length > 0) {
+        const quotedFetched = fetchedThreadIds2.map((id) => `'${sanitizeId(id)}'`)
+        const existingDeals = await execNoRL(dealsSql.selectByThreadIds(schema, quotedFetched))
+
+        if (existingDeals && existingDeals.length > 0) {
+          const dealByThread = {}
+          for (const d of existingDeals) {
+            dealByThread[d.THREAD_ID] = d.UPDATED_AT
+          }
+
+          // Group emails by thread and find latest date per thread
+          const emailsByThread = {}
+          for (const email of allEmails) {
+            if (!email.threadId) continue
+            if (!emailsByThread[email.threadId]) emailsByThread[email.threadId] = []
+            emailsByThread[email.threadId].push(email)
+          }
+
+          const skippedEmailIds = []
+          const skippedThreadIds = []
+
+          for (const [threadId, dealUpdatedAt] of Object.entries(dealByThread)) {
+            const threadEmails = emailsByThread[threadId]
+            if (!threadEmails || threadEmails.length === 0) continue
+
+            const latestEmailDate = threadEmails.reduce((latest, e) => {
+              const d = new Date(e.date)
+              return d > latest ? d : latest
+            }, new Date(0))
+
+            if (latestEmailDate <= new Date(dealUpdatedAt)) {
+              // All emails are older than the deal — skip classification
+              skippedThreadIds.push(threadId)
+              const threadRows = rows.filter((r) => r.THREAD_ID === threadId)
+              skippedEmailIds.push(...threadRows.map((r) => r.EMAIL_METADATA_ID))
+              // Remove these emails from allEmails so they don't go to AI
+              allEmails = allEmails.filter((e) => e.threadId !== threadId)
+            }
+          }
+
+          if (skippedEmailIds.length > 0) {
+            const quotedSkipped = skippedEmailIds.map((id) => `'${sanitizeId(id)}'`)
+            await execNoRL(dealStatesSql.updateStatusByIds(schema, quotedSkipped, STATUS.DEAL))
+            console.log(
+              `[run-classify-pipeline] ${skippedEmailIds.length} rows skipped → deal (already evaluated, ${skippedThreadIds.length} threads)`,
+            )
+          }
         }
       }
 
