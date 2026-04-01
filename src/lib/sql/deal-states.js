@@ -111,6 +111,12 @@ export const dealStates = {
     return `UPDATE ${s}.DEAL_STATES SET STATUS = 'failed', UPDATED_AT = CURRENT_TIMESTAMP WHERE STATUS IN (${literals}) AND BATCH_ID IS NULL AND UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${Number(staleMinutes)}' MINUTE`
   },
 
+  findExhaustedBatches: (schema, status, intervalMinutes, maxEvents) => {
+    const s = sanitizeSchema(schema)
+    const st = sanitizeString(status)
+    return `SELECT ds.BATCH_ID FROM ${s}.DEAL_STATES ds LEFT JOIN ${s}.BATCH_EVENTS be ON be.BATCH_ID = ds.BATCH_ID WHERE ds.STATUS = '${st}' AND ds.BATCH_ID IS NOT NULL AND ds.UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${Number(intervalMinutes)}' MINUTE GROUP BY ds.BATCH_ID HAVING COUNT(be.ID) >= ${Number(maxEvents)}`
+  },
+
   syncFromEmailMetadata: (schema, emailCoreSchema) => {
     const s = sanitizeSchema(schema)
     const ecs = sanitizeSchema(emailCoreSchema)

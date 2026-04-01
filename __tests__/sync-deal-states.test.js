@@ -63,21 +63,27 @@ describe('sync-deal-states command', () => {
     fetchSpy.mockRestore()
   })
 
+  // Helper: mock auth + sync + 2 sweep queries (filter + classify exhausted batches)
+  function mockSyncFlow(syncRows = []) {
+    fetchSpy
+      .mockResolvedValueOnce(authResponse()) // auth
+      .mockResolvedValueOnce(sxtResponse(syncRows)) // sync INSERT...SELECT
+      .mockResolvedValueOnce(sxtResponse([])) // findExhaustedBatches (filtering)
+      .mockResolvedValueOnce(sxtResponse([])) // findExhaustedBatches (classifying)
+  }
+
   it('runs single INSERT...SELECT and returns synced_count from row count', async () => {
     mockInputs()
 
     const insertedRows = [{}, {}]
-
-    fetchSpy
-      .mockResolvedValueOnce(authResponse()) // auth
-      .mockResolvedValueOnce(sxtResponse(insertedRows)) // insert result
+    mockSyncFlow(insertedRows)
 
     const result = await runSyncDealStates()
 
-    expect(result).toEqual({ synced_count: 2 })
+    expect(result).toEqual({ synced_count: 2, dead_lettered: 0 })
 
     const sqlCalls = getSqlCalls(fetchSpy)
-    expect(sqlCalls).toHaveLength(1)
+    expect(sqlCalls).toHaveLength(3)
 
     const sql = getSqlText(sqlCalls[0])
     expect(sql).toContain('INSERT INTO dealsync_stg_v1.DEAL_STATES')
@@ -88,15 +94,11 @@ describe('sync-deal-states command', () => {
 
   it('returns synced_count=0 when insert returns no rows', async () => {
     mockInputs()
-
-    fetchSpy.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(sxtResponse([]))
+    mockSyncFlow([])
 
     const result = await runSyncDealStates()
 
-    expect(result).toEqual({ synced_count: 0 })
-
-    const sqlCalls = getSqlCalls(fetchSpy)
-    expect(sqlCalls).toHaveLength(1)
+    expect(result).toEqual({ synced_count: 0, dead_lettered: 0 })
   })
 
   it('rejects invalid schema', async () => {
@@ -106,8 +108,7 @@ describe('sync-deal-states command', () => {
 
   it('authenticates via proxy with x-shared-secret', async () => {
     mockInputs()
-
-    fetchSpy.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(sxtResponse([]))
+    mockSyncFlow([])
 
     await runSyncDealStates()
 
@@ -119,12 +120,28 @@ describe('sync-deal-states command', () => {
 
   it('uses email-core-schema input in SQL', async () => {
     mockInputs({ 'email-core-schema': 'MY_CORE' })
-
-    fetchSpy.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(sxtResponse([]))
+    mockSyncFlow([])
 
     await runSyncDealStates()
 
     const sql = getSqlText(getSqlCalls(fetchSpy)[0])
     expect(sql).toContain('MY_CORE.EMAIL_METADATA')
+  })
+
+  it('dead-letters exhausted batches stuck in filtering', async () => {
+    mockInputs()
+
+    fetchSpy
+      .mockResolvedValueOnce(authResponse()) // auth
+      .mockResolvedValueOnce(sxtResponse([])) // sync
+      .mockResolvedValueOnce(sxtResponse([{ BATCH_ID: 'batch-1' }])) // findExhaustedBatches (filtering)
+      .mockResolvedValueOnce(sxtResponse([{ C: 5 }])) // countByBatchAndStatus
+      .mockResolvedValueOnce(sxtResponse([])) // updateStatusByBatch
+      .mockResolvedValueOnce(sxtResponse([])) // insertBatchEvent
+      .mockResolvedValueOnce(sxtResponse([])) // findExhaustedBatches (classifying)
+
+    const result = await runSyncDealStates()
+
+    expect(result).toEqual({ synced_count: 0, dead_lettered: 5 })
   })
 })

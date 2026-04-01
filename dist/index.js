@@ -27258,6 +27258,105 @@ function requireCore () {
 
 var coreExports = requireCore();
 
+const byteToHex = [];
+for (let i = 0; i < 256; ++i) {
+    byteToHex.push((i + 0x100).toString(16).slice(1));
+}
+function unsafeStringify(arr, offset = 0) {
+    return (byteToHex[arr[offset + 0]] +
+        byteToHex[arr[offset + 1]] +
+        byteToHex[arr[offset + 2]] +
+        byteToHex[arr[offset + 3]] +
+        '-' +
+        byteToHex[arr[offset + 4]] +
+        byteToHex[arr[offset + 5]] +
+        '-' +
+        byteToHex[arr[offset + 6]] +
+        byteToHex[arr[offset + 7]] +
+        '-' +
+        byteToHex[arr[offset + 8]] +
+        byteToHex[arr[offset + 9]] +
+        '-' +
+        byteToHex[arr[offset + 10]] +
+        byteToHex[arr[offset + 11]] +
+        byteToHex[arr[offset + 12]] +
+        byteToHex[arr[offset + 13]] +
+        byteToHex[arr[offset + 14]] +
+        byteToHex[arr[offset + 15]]).toLowerCase();
+}
+
+let getRandomValues;
+const rnds8 = new Uint8Array(16);
+function rng() {
+    if (!getRandomValues) {
+        if (typeof crypto === 'undefined' || !crypto.getRandomValues) {
+            throw new Error('crypto.getRandomValues() not supported. See https://github.com/uuidjs/uuid#getrandomvalues-not-supported');
+        }
+        getRandomValues = crypto.getRandomValues.bind(crypto);
+    }
+    return getRandomValues(rnds8);
+}
+
+const _state = {};
+function v7(options, buf, offset) {
+    let bytes;
+    {
+        const now = Date.now();
+        const rnds = rng();
+        updateV7State(_state, now, rnds);
+        bytes = v7Bytes(rnds, _state.msecs, _state.seq, buf, offset);
+    }
+    return buf ?? unsafeStringify(bytes);
+}
+function updateV7State(state, now, rnds) {
+    state.msecs ??= -Infinity;
+    state.seq ??= 0;
+    if (now > state.msecs) {
+        state.seq = (rnds[6] << 23) | (rnds[7] << 16) | (rnds[8] << 8) | rnds[9];
+        state.msecs = now;
+    }
+    else {
+        state.seq = (state.seq + 1) | 0;
+        if (state.seq === 0) {
+            state.msecs++;
+        }
+    }
+    return state;
+}
+function v7Bytes(rnds, msecs, seq, buf, offset = 0) {
+    if (rnds.length < 16) {
+        throw new Error('Random bytes length must be >= 16');
+    }
+    if (!buf) {
+        buf = new Uint8Array(16);
+        offset = 0;
+    }
+    else {
+        if (offset < 0 || offset + 16 > buf.length) {
+            throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
+        }
+    }
+    msecs ??= Date.now();
+    seq ??= ((rnds[6] * 0x7f) << 24) | (rnds[7] << 16) | (rnds[8] << 8) | rnds[9];
+    buf[offset++] = (msecs / 0x10000000000) & 0xff;
+    buf[offset++] = (msecs / 0x100000000) & 0xff;
+    buf[offset++] = (msecs / 0x1000000) & 0xff;
+    buf[offset++] = (msecs / 0x10000) & 0xff;
+    buf[offset++] = (msecs / 0x100) & 0xff;
+    buf[offset++] = msecs & 0xff;
+    buf[offset++] = 0x70 | ((seq >>> 28) & 0x0f);
+    buf[offset++] = (seq >>> 20) & 0xff;
+    buf[offset++] = 0x80 | ((seq >>> 14) & 0x3f);
+    buf[offset++] = (seq >>> 6) & 0xff;
+    buf[offset++] = ((seq << 2) & 0xff) | (rnds[10] & 0x03);
+    buf[offset++] = rnds[11];
+    buf[offset++] = rnds[12];
+    buf[offset++] = rnds[13];
+    buf[offset++] = rnds[14];
+    buf[offset++] = rnds[15];
+    return buf;
+}
+
 // Shared retry utilities: sleep + exponential backoff.
 
 function sleep(ms) {
@@ -27636,6 +27735,12 @@ const dealStates = {
     return `UPDATE ${s}.DEAL_STATES SET STATUS = 'failed', UPDATED_AT = CURRENT_TIMESTAMP WHERE STATUS IN (${literals}) AND BATCH_ID IS NULL AND UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${Number(staleMinutes)}' MINUTE`
   },
 
+  findExhaustedBatches: (schema, status, intervalMinutes, maxEvents) => {
+    const s = sanitizeSchema(schema);
+    const st = sanitizeString(status);
+    return `SELECT ds.BATCH_ID FROM ${s}.DEAL_STATES ds LEFT JOIN ${s}.BATCH_EVENTS be ON be.BATCH_ID = ds.BATCH_ID WHERE ds.STATUS = '${st}' AND ds.BATCH_ID IS NOT NULL AND ds.UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${Number(intervalMinutes)}' MINUTE GROUP BY ds.BATCH_ID HAVING COUNT(be.ID) >= ${Number(maxEvents)}`
+  },
+
   syncFromEmailMetadata: (schema, emailCoreSchema) => {
     const s = sanitizeSchema(schema);
     const ecs = sanitizeSchema(emailCoreSchema);
@@ -27728,8 +27833,190 @@ const contacts = {
 };
 
 /**
+ * Concurrency pool + batch event helper.
+ * Used by both run-filter-pipeline and run-classify-pipeline.
+ */
+
+
+/**
+ * Concurrency pool that claims and processes batches.
+ *
+ * @param {Function} claimFn - async function returning a batch or null when exhausted
+ * @param {Function} workerFn - async function(batch, { attempt }) to process a batch
+ * @param {{ maxConcurrent: number, maxRetries: number, onDeadLetter?: (batch: object) => Promise<void> }} opts
+ * @returns {Promise<{ processed: number, failed: number }>}
+ */
+async function runPool(claimFn, workerFn, { maxConcurrent, maxRetries, onDeadLetter }) {
+  const active = new Set();
+  const results = { processed: 0, failed: 0 };
+
+  async function deadLetter(batch, reason, attemptCount) {
+    const attemptsShown = attemptCount ?? batch.attempts ?? 0;
+    coreExports.error(`Batch ${batch.batch_id} ${reason} (${attemptsShown}/${maxRetries}), dead-lettered`);
+    if (typeof onDeadLetter === 'function' && batch.batch_id) {
+      try {
+        await onDeadLetter(batch);
+      } catch (e) {
+        coreExports.error(`onDeadLetter failed for ${batch.batch_id}: ${e.message}`);
+      }
+    }
+    results.failed++;
+  }
+
+  function runWorker(batch) {
+    let currentAttempt = batch.attempts || 0;
+    return (async () => {
+      if (currentAttempt >= maxRetries) {
+        await deadLetter(batch, 'already exhausted', currentAttempt);
+        return
+      }
+      while (currentAttempt < maxRetries) {
+        try {
+          await workerFn(batch, { attempt: currentAttempt });
+          results.processed++;
+          return
+        } catch (err) {
+          currentAttempt++;
+          coreExports.error(
+            `Batch ${batch.batch_id} failed (attempt ${currentAttempt}/${maxRetries}): ${err.message}`,
+          );
+          if (currentAttempt >= maxRetries) {
+            coreExports.error(`Batch ${batch.batch_id} dead-lettered after ${maxRetries} attempts`);
+            await deadLetter(batch, 'after max retries', currentAttempt);
+            return
+          }
+          await sleep(backoffMs(currentAttempt - 1, { max: 30000 }));
+        }
+      }
+    })()
+  }
+
+  while (true) {
+    if (active.size < maxConcurrent) {
+      const batch = await claimFn();
+      if (batch === null) {
+        if (active.size === 0) break
+        await Promise.race(active);
+        continue
+      }
+      const worker = runWorker(batch);
+      active.add(worker);
+      worker.finally(() => active.delete(worker));
+    } else {
+      await Promise.race(active);
+    }
+  }
+
+  return results
+}
+
+const STUCK_INTERVAL_MINUTES$1 = 5;
+
+/**
+ * Fail batches stuck in an active status with exhausted retrigger attempts (>= maxRetries distinct TRIGGER_HASH).
+ *
+ * @param {Function} exec - async (sql) => rows
+ * @param {string} schema
+ * @param {{ activeStatus: string, batchType: string, maxRetries: number }} opts
+ * @returns {Promise<number>} rows transitioned to failed
+ */
+async function sweepStuckRows(exec, schema, { activeStatus, batchType, maxRetries }) {
+  const safeSchema = sanitizeSchema(schema);
+  const statusSql = activeStatus;
+
+  const exhausted = await exec(
+    dealStates.findDeadBatches(safeSchema, statusSql, STUCK_INTERVAL_MINUTES$1, maxRetries),
+  );
+
+  if (!exhausted || exhausted.length === 0) {
+    return 0
+  }
+
+  let totalRows = 0;
+  for (const row of exhausted) {
+    const bid = row.BATCH_ID;
+    const safeBid = sanitizeId(bid);
+    const countRows = await exec(
+      dealStates.countByBatchAndStatus(safeSchema, safeBid, statusSql),
+    );
+    const n = Number(countRows?.[0]?.C ?? 0) || 0;
+    if (n === 0) {
+      coreExports.info(
+        `[sweepStuckRows] skip batch ${bid}: no rows still in status=${activeStatus} (race with other workers)`,
+      );
+      continue
+    }
+    await exec(dealStates.updateStatusByBatch(safeSchema, safeBid, statusSql, STATUS.FAILED));
+    await insertBatchEvent(exec, safeSchema, {
+      triggerHash: v7(),
+      batchId: bid,
+      batchType,
+      eventType: 'dead_letter',
+    });
+    totalRows += n;
+    coreExports.info(
+      `[sweepStuckRows] dead-lettered exhausted batch ${bid} (${n} rows, status=${activeStatus})`,
+    );
+  }
+
+  return totalRows
+}
+
+/**
+ * Fail rows stuck in intermediate statuses with no batch id (never claimed), older than staleMinutes.
+ *
+ * @param {Function} exec
+ * @param {string} schema
+ * @param {{ statuses: string[], staleMinutes: number|string }} opts — staleMinutes may be a non-negative integer or a numeric string (coerced before SQL)
+ * @returns {Promise<number>} rows transitioned to failed
+ */
+async function sweepOrphanedRows(exec, schema, { statuses, staleMinutes }) {
+  const safeSchema = sanitizeSchema(schema);
+  if (!Array.isArray(statuses) || statuses.length === 0) return 0
+
+  const minutesNumber =
+    staleMinutes;
+  if (!Number.isInteger(minutesNumber) || minutesNumber < 0) {
+    throw new TypeError(
+      `[sweepOrphanedRows] staleMinutes must be a non-negative integer, got: ${staleMinutes}`,
+    )
+  }
+  const safeStaleMinutes = minutesNumber;
+
+  const countRows = await exec(dealStates.countOrphaned(safeSchema, statuses, safeStaleMinutes));
+  const n = Number(countRows?.[0]?.C ?? 0) || 0;
+  if (n === 0) return 0
+
+  await exec(dealStates.markOrphanedAsFailed(safeSchema, statuses, safeStaleMinutes));
+
+  coreExports.info(
+    `[sweepOrphanedRows] failed ${n} orphaned row(s) (statuses=${statuses.join(',')}, staleMinutes=${safeStaleMinutes})`,
+  );
+  return n
+}
+
+/**
+ * Insert a row into {schema}.BATCH_EVENTS.
+ *
+ * @param {Function} executeSqlFn - async function(sql) to execute SQL
+ * @param {string} schema - schema name
+ * @param {{ triggerHash: string, batchId: string, batchType: string, eventType: string }} event
+ */
+async function insertBatchEvent(
+  executeSqlFn,
+  schema,
+  { triggerHash, batchId, batchType, eventType },
+) {
+  await executeSqlFn(batchEvents.upsert(schema, triggerHash, batchId, batchType, eventType));
+}
+
+const DEAD_LETTER_EVENT_COUNT = 3;
+const STUCK_INTERVAL_MINUTES = 5;
+
+/**
  * Sync email_metadata into deal_states — insert missing rows with status='pending'.
- * Single INSERT...SELECT query, no pagination. Syncs everything in one shot.
+ * Also marks batches as failed when they have >= 3 batch_events (retried 3+ times)
+ * and are still stuck in an active status.
  */
 async function runSyncDealStates() {
   const authUrl = coreExports.getInput('auth-url');
@@ -27743,17 +28030,63 @@ async function runSyncDealStates() {
     `[sync-deal-states] syncing from ${emailCoreSchema}.EMAIL_METADATA → ${schema}.DEAL_STATES`,
   );
   const jwt = await authenticate(authUrl, authSecret);
+  const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql);
 
-  const result = await executeSql(
-    apiUrl,
-    jwt,
-    biscuit,
-    dealStates.syncFromEmailMetadata(schema, emailCoreSchema),
+  // 1. Sync new rows from email_metadata
+  const result = await exec(dealStates.syncFromEmailMetadata(schema, emailCoreSchema));
+  const count = Array.isArray(result) ? result.length : 0;
+  console.log(`[sync-deal-states] synced: ${count} rows`);
+
+  // 2. Dead-letter batches stuck in active statuses with >= 3 batch_events
+  const filterFailed = await deadLetterExhausted(exec, schema, STATUS.FILTERING, 'filter');
+  const classifyFailed = await deadLetterExhausted(exec, schema, STATUS.CLASSIFYING, 'classify');
+
+  const totalFailed = filterFailed + classifyFailed;
+  if (totalFailed > 0) {
+    console.log(
+      `[sync-deal-states] dead-lettered ${totalFailed} stuck rows (filter=${filterFailed}, classify=${classifyFailed})`,
+    );
+  }
+
+  console.log(`[sync-deal-states] done: synced=${count}, dead_lettered=${totalFailed}`);
+  return { synced_count: count, dead_lettered: totalFailed }
+}
+
+async function deadLetterExhausted(exec, schema, activeStatus, batchType) {
+  const exhausted = await exec(
+    dealStates.findExhaustedBatches(
+      schema,
+      activeStatus,
+      STUCK_INTERVAL_MINUTES,
+      DEAD_LETTER_EVENT_COUNT,
+    ),
   );
 
-  const count = Array.isArray(result) ? result.length : 0;
-  console.log(`[sync-deal-states] done: ${count} synced (1 query)`);
-  return { synced_count: count }
+  if (!exhausted || exhausted.length === 0) return 0
+
+  let totalRows = 0;
+  for (const row of exhausted) {
+    const bid = row.BATCH_ID;
+    const safeBid = sanitizeId(bid);
+
+    const countRows = await exec(
+      dealStates.countByBatchAndStatus(schema, safeBid, activeStatus),
+    );
+    const n = Number(countRows?.[0]?.C ?? 0) || 0;
+    if (n === 0) continue
+
+    await exec(dealStates.updateStatusByBatch(schema, safeBid, activeStatus, STATUS.FAILED));
+    await insertBatchEvent(exec, schema, {
+      triggerHash: v7(),
+      batchId: bid,
+      batchType,
+      eventType: 'dead_letter',
+    });
+    totalRows += n;
+    console.log(`[sync-deal-states] dead-lettered batch ${bid} (${n} rows, status=${activeStatus})`);
+  }
+
+  return totalRows
 }
 
 /** Types of elements found in htmlparser2's DOM */
@@ -37877,283 +38210,6 @@ async function runEvalCompare() {
     console.log(`[eval-compare] NEW MISSED DEALS: ${newMissedDeals.join(', ')}`);
 
   return result
-}
-
-const byteToHex = [];
-for (let i = 0; i < 256; ++i) {
-    byteToHex.push((i + 0x100).toString(16).slice(1));
-}
-function unsafeStringify(arr, offset = 0) {
-    return (byteToHex[arr[offset + 0]] +
-        byteToHex[arr[offset + 1]] +
-        byteToHex[arr[offset + 2]] +
-        byteToHex[arr[offset + 3]] +
-        '-' +
-        byteToHex[arr[offset + 4]] +
-        byteToHex[arr[offset + 5]] +
-        '-' +
-        byteToHex[arr[offset + 6]] +
-        byteToHex[arr[offset + 7]] +
-        '-' +
-        byteToHex[arr[offset + 8]] +
-        byteToHex[arr[offset + 9]] +
-        '-' +
-        byteToHex[arr[offset + 10]] +
-        byteToHex[arr[offset + 11]] +
-        byteToHex[arr[offset + 12]] +
-        byteToHex[arr[offset + 13]] +
-        byteToHex[arr[offset + 14]] +
-        byteToHex[arr[offset + 15]]).toLowerCase();
-}
-
-let getRandomValues;
-const rnds8 = new Uint8Array(16);
-function rng() {
-    if (!getRandomValues) {
-        if (typeof crypto === 'undefined' || !crypto.getRandomValues) {
-            throw new Error('crypto.getRandomValues() not supported. See https://github.com/uuidjs/uuid#getrandomvalues-not-supported');
-        }
-        getRandomValues = crypto.getRandomValues.bind(crypto);
-    }
-    return getRandomValues(rnds8);
-}
-
-const _state = {};
-function v7(options, buf, offset) {
-    let bytes;
-    {
-        const now = Date.now();
-        const rnds = rng();
-        updateV7State(_state, now, rnds);
-        bytes = v7Bytes(rnds, _state.msecs, _state.seq, buf, offset);
-    }
-    return buf ?? unsafeStringify(bytes);
-}
-function updateV7State(state, now, rnds) {
-    state.msecs ??= -Infinity;
-    state.seq ??= 0;
-    if (now > state.msecs) {
-        state.seq = (rnds[6] << 23) | (rnds[7] << 16) | (rnds[8] << 8) | rnds[9];
-        state.msecs = now;
-    }
-    else {
-        state.seq = (state.seq + 1) | 0;
-        if (state.seq === 0) {
-            state.msecs++;
-        }
-    }
-    return state;
-}
-function v7Bytes(rnds, msecs, seq, buf, offset = 0) {
-    if (rnds.length < 16) {
-        throw new Error('Random bytes length must be >= 16');
-    }
-    if (!buf) {
-        buf = new Uint8Array(16);
-        offset = 0;
-    }
-    else {
-        if (offset < 0 || offset + 16 > buf.length) {
-            throw new RangeError(`UUID byte range ${offset}:${offset + 15} is out of buffer bounds`);
-        }
-    }
-    msecs ??= Date.now();
-    seq ??= ((rnds[6] * 0x7f) << 24) | (rnds[7] << 16) | (rnds[8] << 8) | rnds[9];
-    buf[offset++] = (msecs / 0x10000000000) & 0xff;
-    buf[offset++] = (msecs / 0x100000000) & 0xff;
-    buf[offset++] = (msecs / 0x1000000) & 0xff;
-    buf[offset++] = (msecs / 0x10000) & 0xff;
-    buf[offset++] = (msecs / 0x100) & 0xff;
-    buf[offset++] = msecs & 0xff;
-    buf[offset++] = 0x70 | ((seq >>> 28) & 0x0f);
-    buf[offset++] = (seq >>> 20) & 0xff;
-    buf[offset++] = 0x80 | ((seq >>> 14) & 0x3f);
-    buf[offset++] = (seq >>> 6) & 0xff;
-    buf[offset++] = ((seq << 2) & 0xff) | (rnds[10] & 0x03);
-    buf[offset++] = rnds[11];
-    buf[offset++] = rnds[12];
-    buf[offset++] = rnds[13];
-    buf[offset++] = rnds[14];
-    buf[offset++] = rnds[15];
-    return buf;
-}
-
-/**
- * Concurrency pool + batch event helper.
- * Used by both run-filter-pipeline and run-classify-pipeline.
- */
-
-
-/**
- * Concurrency pool that claims and processes batches.
- *
- * @param {Function} claimFn - async function returning a batch or null when exhausted
- * @param {Function} workerFn - async function(batch, { attempt }) to process a batch
- * @param {{ maxConcurrent: number, maxRetries: number, onDeadLetter?: (batch: object) => Promise<void> }} opts
- * @returns {Promise<{ processed: number, failed: number }>}
- */
-async function runPool(claimFn, workerFn, { maxConcurrent, maxRetries, onDeadLetter }) {
-  const active = new Set();
-  const results = { processed: 0, failed: 0 };
-
-  async function deadLetter(batch, reason, attemptCount) {
-    const attemptsShown = attemptCount ?? batch.attempts ?? 0;
-    coreExports.error(`Batch ${batch.batch_id} ${reason} (${attemptsShown}/${maxRetries}), dead-lettered`);
-    if (typeof onDeadLetter === 'function' && batch.batch_id) {
-      try {
-        await onDeadLetter(batch);
-      } catch (e) {
-        coreExports.error(`onDeadLetter failed for ${batch.batch_id}: ${e.message}`);
-      }
-    }
-    results.failed++;
-  }
-
-  function runWorker(batch) {
-    let currentAttempt = batch.attempts || 0;
-    return (async () => {
-      if (currentAttempt >= maxRetries) {
-        await deadLetter(batch, 'already exhausted', currentAttempt);
-        return
-      }
-      while (currentAttempt < maxRetries) {
-        try {
-          await workerFn(batch, { attempt: currentAttempt });
-          results.processed++;
-          return
-        } catch (err) {
-          currentAttempt++;
-          coreExports.error(
-            `Batch ${batch.batch_id} failed (attempt ${currentAttempt}/${maxRetries}): ${err.message}`,
-          );
-          if (currentAttempt >= maxRetries) {
-            coreExports.error(`Batch ${batch.batch_id} dead-lettered after ${maxRetries} attempts`);
-            await deadLetter(batch, 'after max retries', currentAttempt);
-            return
-          }
-          await sleep(backoffMs(currentAttempt - 1, { max: 30000 }));
-        }
-      }
-    })()
-  }
-
-  while (true) {
-    if (active.size < maxConcurrent) {
-      const batch = await claimFn();
-      if (batch === null) {
-        if (active.size === 0) break
-        await Promise.race(active);
-        continue
-      }
-      const worker = runWorker(batch);
-      active.add(worker);
-      worker.finally(() => active.delete(worker));
-    } else {
-      await Promise.race(active);
-    }
-  }
-
-  return results
-}
-
-const STUCK_INTERVAL_MINUTES = 5;
-
-/**
- * Fail batches stuck in an active status with exhausted retrigger attempts (>= maxRetries distinct TRIGGER_HASH).
- *
- * @param {Function} exec - async (sql) => rows
- * @param {string} schema
- * @param {{ activeStatus: string, batchType: string, maxRetries: number }} opts
- * @returns {Promise<number>} rows transitioned to failed
- */
-async function sweepStuckRows(exec, schema, { activeStatus, batchType, maxRetries }) {
-  const safeSchema = sanitizeSchema(schema);
-  const statusSql = activeStatus;
-
-  const exhausted = await exec(
-    dealStates.findDeadBatches(safeSchema, statusSql, STUCK_INTERVAL_MINUTES, maxRetries),
-  );
-
-  if (!exhausted || exhausted.length === 0) {
-    return 0
-  }
-
-  let totalRows = 0;
-  for (const row of exhausted) {
-    const bid = row.BATCH_ID;
-    const safeBid = sanitizeId(bid);
-    const countRows = await exec(
-      dealStates.countByBatchAndStatus(safeSchema, safeBid, statusSql),
-    );
-    const n = Number(countRows?.[0]?.C ?? 0) || 0;
-    if (n === 0) {
-      coreExports.info(
-        `[sweepStuckRows] skip batch ${bid}: no rows still in status=${activeStatus} (race with other workers)`,
-      );
-      continue
-    }
-    await exec(dealStates.updateStatusByBatch(safeSchema, safeBid, statusSql, STATUS.FAILED));
-    await insertBatchEvent(exec, safeSchema, {
-      triggerHash: v7(),
-      batchId: bid,
-      batchType,
-      eventType: 'dead_letter',
-    });
-    totalRows += n;
-    coreExports.info(
-      `[sweepStuckRows] dead-lettered exhausted batch ${bid} (${n} rows, status=${activeStatus})`,
-    );
-  }
-
-  return totalRows
-}
-
-/**
- * Fail rows stuck in intermediate statuses with no batch id (never claimed), older than staleMinutes.
- *
- * @param {Function} exec
- * @param {string} schema
- * @param {{ statuses: string[], staleMinutes: number|string }} opts — staleMinutes may be a non-negative integer or a numeric string (coerced before SQL)
- * @returns {Promise<number>} rows transitioned to failed
- */
-async function sweepOrphanedRows(exec, schema, { statuses, staleMinutes }) {
-  const safeSchema = sanitizeSchema(schema);
-  if (!Array.isArray(statuses) || statuses.length === 0) return 0
-
-  const minutesNumber =
-    staleMinutes;
-  if (!Number.isInteger(minutesNumber) || minutesNumber < 0) {
-    throw new TypeError(
-      `[sweepOrphanedRows] staleMinutes must be a non-negative integer, got: ${staleMinutes}`,
-    )
-  }
-  const safeStaleMinutes = minutesNumber;
-
-  const countRows = await exec(dealStates.countOrphaned(safeSchema, statuses, safeStaleMinutes));
-  const n = Number(countRows?.[0]?.C ?? 0) || 0;
-  if (n === 0) return 0
-
-  await exec(dealStates.markOrphanedAsFailed(safeSchema, statuses, safeStaleMinutes));
-
-  coreExports.info(
-    `[sweepOrphanedRows] failed ${n} orphaned row(s) (statuses=${statuses.join(',')}, staleMinutes=${safeStaleMinutes})`,
-  );
-  return n
-}
-
-/**
- * Insert a row into {schema}.BATCH_EVENTS.
- *
- * @param {Function} executeSqlFn - async function(sql) to execute SQL
- * @param {string} schema - schema name
- * @param {{ triggerHash: string, batchId: string, batchType: string, eventType: string }} event
- */
-async function insertBatchEvent(
-  executeSqlFn,
-  schema,
-  { triggerHash, batchId, batchType, eventType },
-) {
-  await executeSqlFn(batchEvents.upsert(schema, triggerHash, batchId, batchType, eventType));
 }
 
 /**
