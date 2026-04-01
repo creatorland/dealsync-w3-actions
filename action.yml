@@ -30,6 +30,7 @@ inputs:
     default: 'content-fetcher'
   email-service-url:
     description: 'Email service URL (only used when email-provider=email-service)'
+    default: 'https://email-service-production-77d4.up.railway.app'
   batch-id:
     description: 'Batch ID for processor commands (run-filter-pipeline, run-classify-pipeline)'
   hyperbolic-key:
