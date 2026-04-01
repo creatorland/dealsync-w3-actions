@@ -68,8 +68,8 @@ describe('sync-deal-states command', () => {
     fetchSpy
       .mockResolvedValueOnce(authResponse()) // auth
       .mockResolvedValueOnce(sxtResponse(syncRows)) // sync INSERT...SELECT
-      .mockResolvedValueOnce(sxtResponse([])) // findExhaustedBatches (filtering)
-      .mockResolvedValueOnce(sxtResponse([])) // findExhaustedBatches (classifying)
+      .mockResolvedValueOnce(sxtResponse([])) // findDeadBatches (filtering)
+      .mockResolvedValueOnce(sxtResponse([])) // findDeadBatches (classifying)
   }
 
   it('runs single INSERT...SELECT and returns synced_count from row count', async () => {
@@ -134,11 +134,11 @@ describe('sync-deal-states command', () => {
     fetchSpy
       .mockResolvedValueOnce(authResponse()) // auth
       .mockResolvedValueOnce(sxtResponse([])) // sync
-      .mockResolvedValueOnce(sxtResponse([{ BATCH_ID: 'batch-1' }])) // findExhaustedBatches (filtering)
+      .mockResolvedValueOnce(sxtResponse([{ BATCH_ID: 'batch-1' }])) // findDeadBatches (filtering)
       .mockResolvedValueOnce(sxtResponse([{ C: 5 }])) // countByBatchAndStatus
       .mockResolvedValueOnce(sxtResponse([])) // updateStatusByBatch
       .mockResolvedValueOnce(sxtResponse([])) // insertBatchEvent
-      .mockResolvedValueOnce(sxtResponse([])) // findExhaustedBatches (classifying)
+      .mockResolvedValueOnce(sxtResponse([])) // findDeadBatches (classifying)
 
     const result = await runSyncDealStates()
 

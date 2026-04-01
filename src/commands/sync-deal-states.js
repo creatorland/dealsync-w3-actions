@@ -53,7 +53,7 @@ export async function runSyncDealStates() {
 
 async function deadLetterExhausted(exec, schema, activeStatus, batchType) {
   const exhausted = await exec(
-    dealStatesSql.findExhaustedBatches(
+    dealStatesSql.findDeadBatches(
       schema,
       activeStatus,
       STUCK_INTERVAL_MINUTES,
