@@ -4,7 +4,12 @@ import { runPool, insertBatchEvent, sweepStuckRows } from '../lib/pipeline.js'
 import { authenticate, executeSql, acquireRateLimitToken } from '../lib/db.js'
 import { isRejected } from '../lib/emails.js'
 import { fetchThreadEmails } from '../lib/fetch-threads.js'
-import { sanitizeSchema, sanitizeId, STATUS, dealStates as dealStatesSql } from '../lib/sql/index.js'
+import {
+  sanitizeSchema,
+  sanitizeId,
+  STATUS,
+  dealStates as dealStatesSql,
+} from '../lib/sql/index.js'
 
 /**
  * Orchestrator that claims and processes filter batches concurrently

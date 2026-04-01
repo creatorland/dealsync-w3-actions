@@ -227,9 +227,7 @@ export async function fetchEmails(messageIds, metaByMessageId, opts) {
       // map the chunk's messageIds to failures so none are silently lost.
       const chunk = chunks[i]
       const errMsg = r.reason?.message || String(r.reason) || 'unknown error'
-      console.log(
-        `[fetchEmails] chunk ${i + 1}/${totalChunks}: unexpected rejection — ${errMsg}`,
-      )
+      console.log(`[fetchEmails] chunk ${i + 1}/${totalChunks}: unexpected rejection — ${errMsg}`)
       allFailed.push(...chunk.map((messageId) => ({ messageId, error: errMsg })))
     }
   }
