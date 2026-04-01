@@ -165,65 +165,6 @@ export function isRejected(email) {
 }
 
 // ---------------------------------------------------------------------------
-// Concurrency helper — global semaphore
-// ---------------------------------------------------------------------------
-
-/**
- * Semaphore that limits concurrent async operations across all callers.
- * Caps total in-flight content fetcher requests regardless of how many
- * batch workers are running concurrently.
- */
-class Semaphore {
-  constructor(max) {
-    this.max = max
-    this.active = 0
-    this.queue = []
-  }
-
-  async acquire() {
-    if (this.active < this.max) {
-      this.active++
-      return
-    }
-    return new Promise((resolve) => this.queue.push(resolve))
-  }
-
-  release() {
-    if (this.queue.length > 0) {
-      this.queue.shift()()
-    } else {
-      this.active--
-    }
-  }
-}
-
-// Global: max 5 concurrent content fetcher HTTP requests across ALL batch workers
-const fetchSemaphore = new Semaphore(5)
-
-/**
- * Work-stealing pool: spawns `concurrency` workers that each grab the next
- * available item when idle. Returns results matching Promise.allSettled format.
- */
-async function poolMap(items, fn, concurrency) {
-  const results = new Array(items.length)
-  let nextIndex = 0
-
-  async function worker() {
-    while (nextIndex < items.length) {
-      const i = nextIndex++
-      try {
-        results[i] = { status: 'fulfilled', value: await fn(items[i], i) }
-      } catch (err) {
-        results[i] = { status: 'rejected', reason: err }
-      }
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()))
-  return results
-}
-
-// ---------------------------------------------------------------------------
 // Email content fetcher
 // ---------------------------------------------------------------------------
 
@@ -246,15 +187,7 @@ async function poolMap(items, fn, concurrency) {
  * @returns {Promise<{ fetched: object[], failed: { messageId: string, error: string }[] }>}
  */
 export async function fetchEmails(messageIds, metaByMessageId, opts) {
-  const {
-    contentFetcherUrl,
-    userId,
-    syncStateId,
-    chunkSize,
-    fetchTimeoutMs,
-    format,
-    maxConcurrentChunks = 3,
-  } = opts
+  const { contentFetcherUrl, userId, syncStateId, chunkSize, fetchTimeoutMs, format } = opts
 
   if (!messageIds || messageIds.length === 0) {
     return { fetched: [], failed: [] }
@@ -267,30 +200,18 @@ export async function fetchEmails(messageIds, metaByMessageId, opts) {
   }
   const totalChunks = chunks.length
 
-  console.log(
-    `[fetchEmails] ${totalChunks} chunks, concurrency=${Math.min(maxConcurrentChunks, totalChunks)}`,
-  )
-
-  // Work-stealing pool with global semaphore: limits total in-flight
-  // requests across ALL concurrent batch workers (not just this call)
-  const results = await poolMap(
-    chunks,
-    async (chunk, idx) => {
-      await fetchSemaphore.acquire()
-      try {
-        return await fetchChunk(chunk, idx + 1, totalChunks, {
-          contentFetcherUrl,
-          userId,
-          syncStateId,
-          fetchTimeoutMs,
-          format,
-          metaByMessageId,
-        })
-      } finally {
-        fetchSemaphore.release()
-      }
-    },
-    maxConcurrentChunks,
+  // Fire all chunks concurrently
+  const results = await Promise.allSettled(
+    chunks.map((chunk, idx) =>
+      fetchChunk(chunk, idx + 1, totalChunks, {
+        contentFetcherUrl,
+        userId,
+        syncStateId,
+        fetchTimeoutMs,
+        format,
+        metaByMessageId,
+      }),
+    ),
   )
 
   // Aggregate results
