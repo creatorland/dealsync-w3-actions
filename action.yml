@@ -25,6 +25,11 @@ inputs:
     description: 'SxT API key for rate limiter token acquisition'
   content-fetcher-url:
     description: 'Content fetcher service URL (run-filter-pipeline, run-classify-pipeline)'
+  email-provider:
+    description: 'Email data provider: content-fetcher (default) or email-service'
+    default: 'content-fetcher'
+  email-service-url:
+    description: 'Email service URL (only used when email-provider=email-service)'
   batch-id:
     description: 'Batch ID for processor commands (run-filter-pipeline, run-classify-pipeline)'
   hyperbolic-key:

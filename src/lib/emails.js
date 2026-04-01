@@ -190,13 +190,76 @@ function enrichAndCollect(emails, allEmails, metaByMessageId) {
 }
 
 /**
- * Fetch email content from the content-fetcher service in chunks,
- * enriching each email with metadata from the provided map.
+ * Fetch emails from the email-service API using compat format.
+ * Returns the same shape as the content-fetcher for pipeline compatibility.
+ */
+async function fetchEmailsFromService(messageIds, metaByMessageId, opts) {
+  const { emailServiceUrl, userId, fetchTimeoutMs, format } = opts
+
+  if (!messageIds || messageIds.length === 0) return []
+
+  const fetchStart = Date.now()
+  const { signal, clear } = withTimeout(fetchTimeoutMs)
+
+  try {
+    const resp = await fetch(`${emailServiceUrl}/v1/emails/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{ user_id: userId, ids: messageIds }],
+        format: format === 'metadata' ? 'compat' : 'compat',
+      }),
+      signal,
+    })
+    clear()
+
+    if (!resp.ok) {
+      throw new Error(`email-service HTTP ${resp.status}: ${await resp.text()}`)
+    }
+
+    const result = await resp.json()
+    const allEmails = []
+
+    for (const item of result.data || []) {
+      const email = item.payload
+      enrichAndCollect([email], allEmails, metaByMessageId)
+    }
+
+    const failed = (result.errors || []).map((e) => e.message_id)
+    if (failed.length > 0) {
+      console.log(`[email-service] ${failed.length} messages failed: ${failed.join(', ')}`)
+    }
+
+    if (allEmails.length === 0 && messageIds.length > 0) {
+      throw new Error(`All email-service fetches failed — 0/${messageIds.length} emails retrieved`)
+    }
+
+    const fetchTotalMs = Date.now() - fetchStart
+    const cached = result.meta?.cached || 0
+    console.log(
+      `[email-service] fetch done: ${allEmails.length}/${messageIds.length} emails ` +
+        `(${cached} cached), ${fetchTotalMs}ms`,
+    )
+
+    return allEmails
+  } catch (err) {
+    clear()
+    throw err
+  }
+}
+
+/**
+ * Fetch email content, enriching each email with metadata from the provided map.
+ * Supports two providers via opts.emailProvider:
+ *   - 'content-fetcher' (default): calls content-fetcher service
+ *   - 'email-service': calls email-service API with compat format
  *
  * @param {string[]} messageIds - message IDs to fetch
  * @param {Map} metaByMessageId - Map<messageId, { EMAIL_METADATA_ID, THREAD_ID, PREVIOUS_AI_SUMMARY? }>
  * @param {object} opts
  * @param {string} opts.contentFetcherUrl - base URL for content fetcher
+ * @param {string} [opts.emailServiceUrl] - base URL for email-service
+ * @param {string} [opts.emailProvider='content-fetcher'] - which provider to use
  * @param {string} opts.userId - user ID for the request
  * @param {string} [opts.syncStateId] - optional sync state ID
  * @param {number} opts.chunkSize - messages per request
@@ -206,6 +269,9 @@ function enrichAndCollect(emails, allEmails, metaByMessageId) {
  * @returns {Promise<object[]>} enriched email objects
  */
 export async function fetchEmails(messageIds, metaByMessageId, opts) {
+  if (opts.emailProvider === 'email-service') {
+    return fetchEmailsFromService(messageIds, metaByMessageId, opts)
+  }
   const {
     contentFetcherUrl,
     userId,

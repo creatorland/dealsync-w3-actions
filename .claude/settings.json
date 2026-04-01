@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/rjlacanlaled/.claude/skills/work-on-clickup-task/**)",
+      "Edit(~/.claude/skills/work-on-clickup-task/**)",
+      "Bash(gh api:*)",
+      "mcp__clickup__clickup_get_task",
+      "Bash(curl -s -L \"https://developers.google.com/workspace/gmail/api/guides/performance\")",
+      "Bash(curl -s -L \"https://developers.google.com/workspace/gmail/api/reference/quota\")",
+      "Bash(gh issue:*)"
+    ],
+    "additionalDirectories": [
+      "/Users/rjlacanlaled/.claude/skills/work-on-clickup-task"
+    ]
+  }
+}

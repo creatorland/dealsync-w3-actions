@@ -24,6 +24,8 @@ export async function runFilterPipeline() {
   const biscuit = core.getInput('biscuit')
   const schema = sanitizeSchema(core.getInput('schema'))
   const contentFetcherUrl = core.getInput('content-fetcher-url')
+  const emailProvider = core.getInput('email-provider') || 'content-fetcher'
+  const emailServiceUrl = core.getInput('email-service-url')
   const maxConcurrent = parseInt(core.getInput('max-concurrent') || '5', 10)
   const batchSize = parseInt(core.getInput('filter-batch-size') || '200', 10)
   const maxRetries = parseInt(core.getInput('max-retries') || '6', 10)
@@ -138,6 +140,8 @@ export async function runFilterPipeline() {
     t0 = Date.now()
     const emails = await fetchEmails(messageIds, metaByMessageId, {
       contentFetcherUrl,
+      emailProvider,
+      emailServiceUrl,
       userId,
       syncStateId,
       chunkSize,

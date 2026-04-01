@@ -216,6 +216,8 @@ describe('run-filter-pipeline command', () => {
     expect(metaMap.get('msg-1')).toEqual(rows[0])
     expect(opts).toEqual({
       contentFetcherUrl: 'https://fetcher.example.com',
+      emailProvider: 'content-fetcher',
+      emailServiceUrl: '',
       userId: 'user-1',
       syncStateId: 'ss-1',
       chunkSize: 25,

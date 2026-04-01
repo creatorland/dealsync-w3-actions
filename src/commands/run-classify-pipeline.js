@@ -30,6 +30,8 @@ export async function runClassifyPipeline() {
   const schema = sanitizeSchema(core.getInput('schema'))
   const coreSchema = sanitizeSchema(core.getInput('email-core-schema') || 'EMAIL_CORE_STAGING')
   const contentFetcherUrl = core.getInput('content-fetcher-url')
+  const emailProvider = core.getInput('email-provider') || 'content-fetcher'
+  const emailServiceUrl = core.getInput('email-service-url')
   const hyperbolicKey = core.getInput('hyperbolic-key')
   const primaryModel = core.getInput('primary-model') || 'Qwen/Qwen3-235B-A22B-Instruct-2507'
   const fallbackModel = core.getInput('fallback-model') || 'deepseek-ai/DeepSeek-V3'
@@ -189,6 +191,8 @@ export async function runClassifyPipeline() {
       try {
         allEmails = await fetchEmails(messageIds, metaByMessageId, {
           contentFetcherUrl,
+          emailProvider,
+          emailServiceUrl,
           userId,
           syncStateId,
           chunkSize,
