@@ -303,20 +303,22 @@ async function fetchChunk(chunk, chunkIndex, totalChunks, opts) {
 
   // --- HTTP 502: try to parse JSON body ---
   if (resp.status === 502) {
+    const raw = await resp.text()
     try {
-      const result = await resp.json()
-      const errors = result.errors || []
-      const failed = errors.map((e) => ({ messageId: e.messageId, error: e.error }))
-      console.log(`${label}: HTTP 502 total failure — ${failed.length} failed (${elapsed}ms)`)
-      return { fetched: [], failed }
-    } catch {
-      // Non-JSON 502 body
-      const text = await resp.text()
-      console.log(`${label}: HTTP 502 total failure — ${chunk.length} failed (${elapsed}ms)`)
-      return {
-        fetched: [],
-        failed: chunk.map((messageId) => ({ messageId, error: `HTTP 502: ${text}` })),
+      const result = JSON.parse(raw)
+      if (result.errors && Array.isArray(result.errors) && result.errors.length > 0) {
+        const failed = result.errors.map((e) => ({ messageId: e.messageId, error: e.error }))
+        console.log(`${label}: HTTP 502 total failure — ${failed.length} failed (${elapsed}ms)`)
+        return { fetched: [], failed }
       }
+    } catch {
+      // Non-JSON 502 body — fall through
+    }
+    // No usable per-message errors (non-JSON body, or JSON without errors array)
+    console.log(`${label}: HTTP 502 total failure — ${chunk.length} failed (${elapsed}ms)`)
+    return {
+      fetched: [],
+      failed: chunk.map((messageId) => ({ messageId, error: `HTTP 502: ${raw}` })),
     }
   }
 

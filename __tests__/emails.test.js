@@ -286,6 +286,26 @@ describe('fetchEmails', () => {
     expect(result.failed[1]).toEqual({ messageId: 'msg-2', error: 'upstream timeout' })
   })
 
+  it('treats 502 JSON with no errors array as failure for all messageIds in chunk', async () => {
+    const messageIds = ['msg-1', 'msg-2']
+    const meta = makeMeta(messageIds)
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      text: async () => JSON.stringify({ status: 'failure', message: 'gateway timeout' }),
+    })
+
+    const result = await fetchEmails(messageIds, meta, makeOpts({ chunkSize: 10 }))
+
+    expect(result.fetched).toHaveLength(0)
+    expect(result.failed).toHaveLength(2)
+    expect(result.failed[0].messageId).toBe('msg-1')
+    expect(result.failed[0].error).toContain('HTTP 502')
+    expect(result.failed[1].messageId).toBe('msg-2')
+    expect(result.failed[1].error).toContain('HTTP 502')
+  })
+
   it('treats non-JSON 502 as transport error for all messageIds in chunk', async () => {
     const messageIds = ['msg-1', 'msg-2']
     const meta = makeMeta(messageIds)
