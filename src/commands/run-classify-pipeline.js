@@ -2,7 +2,7 @@ import { v7 as uuidv7 } from 'uuid'
 import * as core from '@actions/core'
 import { authenticate, executeSql, acquireRateLimitToken } from '../lib/db.js'
 import { callModel, parseAndValidate, buildPrompt } from '../lib/ai.js'
-import { fetchEmails } from '../lib/emails.js'
+import { fetchThreadEmails } from '../lib/fetch-threads.js'
 import { runPool, insertBatchEvent, sweepStuckRows, sweepOrphanedRows } from '../lib/pipeline.js'
 import { WriteBatcher } from '../lib/batcher.js'
 import {
@@ -170,7 +170,7 @@ export async function runClassifyPipeline() {
     let modelUsed = primaryModel
 
     if (!threads) {
-      // a. Fetch email content via fetchEmails() (NO format param = full content)
+      // a. Fetch email content via fetchThreadEmails() (NO format param = full content)
       const metaByMessageId = new Map(rows.map((r) => [r.MESSAGE_ID, r]))
       const userId = rows[0].USER_ID
       const syncStateId = rows[0].SYNC_STATE_ID
@@ -178,13 +178,25 @@ export async function runClassifyPipeline() {
 
       let allEmails
       try {
-        allEmails = await fetchEmails(messageIds, metaByMessageId, {
-          contentFetcherUrl,
-          userId,
-          syncStateId,
-          chunkSize,
-          fetchTimeoutMs,
-        })
+        const { completedThreads, unfetchableThreadIds } = await fetchThreadEmails(
+          messageIds,
+          metaByMessageId,
+          {
+            contentFetcherUrl,
+            userId,
+            syncStateId,
+            chunkSize,
+            fetchTimeoutMs,
+          },
+        )
+        allEmails = completedThreads
+
+        if (unfetchableThreadIds.length > 0) {
+          console.log(
+            `[run-classify-pipeline] ${unfetchableThreadIds.length} unfetchable threads — ` +
+              `will be retried on next batch attempt`,
+          )
+        }
       } catch {
         allEmails = []
       }
