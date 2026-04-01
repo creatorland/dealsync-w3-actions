@@ -177,6 +177,7 @@ export async function runClassifyPipeline() {
       const messageIds = rows.map((r) => r.MESSAGE_ID)
 
       let allEmails
+      let fetchUnfetchableThreadIds = []
       try {
         const { completedThreads, unfetchableThreadIds } = await fetchThreadEmails(
           messageIds,
@@ -190,15 +191,19 @@ export async function runClassifyPipeline() {
           },
         )
         allEmails = completedThreads
-
-        if (unfetchableThreadIds.length > 0) {
-          console.log(
-            `[run-classify-pipeline] ${unfetchableThreadIds.length} unfetchable threads — ` +
-              `will be retried on next batch attempt`,
-          )
-        }
+        fetchUnfetchableThreadIds = unfetchableThreadIds
       } catch {
         allEmails = []
+      }
+
+      if (fetchUnfetchableThreadIds.length > 0) {
+        console.log(
+          `[run-classify-pipeline] ${fetchUnfetchableThreadIds.length} unfetchable threads — ` +
+            `throwing to trigger batch-level retry`,
+        )
+        throw new Error(
+          `${fetchUnfetchableThreadIds.length} threads unfetchable after content fetch retries`,
+        )
       }
 
       // Handle unfetchable threads — threads with zero emails returned

@@ -1600,4 +1600,37 @@ describe('run-classify-pipeline command', () => {
 
     expect(mockBatcherInstance.pushContactDeletes).not.toHaveBeenCalled()
   })
+
+  // ----------------------------------------------------------
+  // Throws when threads are unfetchable (triggers batch-level retry)
+  // ----------------------------------------------------------
+
+  it('throws when threads are unfetchable (triggers batch-level retry)', async () => {
+    mockInputs()
+
+    const rows = makeBatchRows(2)
+
+    mockRunPool.mockImplementation(async (claimFn, workerFn) => {
+      mockExecuteSql
+        .mockResolvedValueOnce([]) // UPDATE claim
+        .mockResolvedValueOnce(rows) // SELECT claimed
+
+      const batch = await claimFn()
+
+      mockExecuteSql.mockResolvedValueOnce([]) // no existing audit
+
+      // fetchThreadEmails returns unfetchable threads
+      mockFetchThreadEmails.mockResolvedValueOnce({
+        completedThreads: [],
+        unfetchableThreadIds: ['thread-1'],
+      })
+
+      // processClassifyBatch should throw
+      await expect(workerFn(batch, { attempt: 0 })).rejects.toThrow(/unfetchable/)
+
+      return { processed: 0, failed: 1 }
+    })
+
+    await runClassifyPipeline()
+  })
 })
