@@ -31,10 +31,19 @@ export async function runSyncDealStates() {
   const jwt = await authenticate(authUrl, authSecret)
   const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql)
 
-  // 1. Sync new rows from email_metadata
-  const result = await exec(dealStatesSql.syncFromEmailMetadata(schema, emailCoreSchema))
-  const count = Array.isArray(result) ? result.length : 0
-  console.log(`[sync-deal-states] synced: ${count} rows`)
+  // 1. Sync new rows from email_metadata in chunks
+  const SYNC_CHUNK_SIZE = 500
+  let totalSynced = 0
+  let chunk = 0
+  while (true) {
+    chunk++
+    const result = await exec(dealStatesSql.syncFromEmailMetadata(schema, emailCoreSchema, SYNC_CHUNK_SIZE))
+    const count = Array.isArray(result) ? result.length : 0
+    totalSynced += count
+    console.log(`[sync-deal-states] chunk ${chunk}: synced ${count} rows (total: ${totalSynced})`)
+    if (count < SYNC_CHUNK_SIZE) break
+  }
+  const count = totalSynced
 
   // 2. Dead-letter batches stuck in active statuses with >= 3 batch_events
   const filterFailed = await deadLetterExhausted(exec, schema, STATUS.FILTERING, 'filter')

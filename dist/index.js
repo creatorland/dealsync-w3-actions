@@ -27761,10 +27761,10 @@ const dealStates = {
   },
 
 
-  syncFromEmailMetadata: (schema, emailCoreSchema) => {
+  syncFromEmailMetadata: (schema, emailCoreSchema, limit = 500) => {
     const s = sanitizeSchema(schema);
     const ecs = sanitizeSchema(emailCoreSchema);
-    return `INSERT INTO ${s}.DEAL_STATES (ID, EMAIL_METADATA_ID, USER_ID, THREAD_ID, MESSAGE_ID, STATUS, CREATED_AT, UPDATED_AT) SELECT gen_random_uuid(), em.ID, em.USER_ID, em.THREAD_ID, em.MESSAGE_ID, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM ${ecs}.EMAIL_METADATA em WHERE NOT EXISTS (SELECT 1 FROM ${s}.DEAL_STATES ds WHERE ds.EMAIL_METADATA_ID = em.ID) ON CONFLICT (EMAIL_METADATA_ID) DO UPDATE SET UPDATED_AT = CURRENT_TIMESTAMP`
+    return `INSERT INTO ${s}.DEAL_STATES (ID, EMAIL_METADATA_ID, USER_ID, THREAD_ID, MESSAGE_ID, STATUS, CREATED_AT, UPDATED_AT) SELECT gen_random_uuid(), em.ID, em.USER_ID, em.THREAD_ID, em.MESSAGE_ID, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM ${ecs}.EMAIL_METADATA em WHERE NOT EXISTS (SELECT 1 FROM ${s}.DEAL_STATES ds WHERE ds.EMAIL_METADATA_ID = em.ID) LIMIT ${Number(limit)} ON CONFLICT (EMAIL_METADATA_ID) DO UPDATE SET UPDATED_AT = CURRENT_TIMESTAMP`
   },
 };
 
@@ -28052,10 +28052,19 @@ async function runSyncDealStates() {
   const jwt = await authenticate(authUrl, authSecret);
   const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql);
 
-  // 1. Sync new rows from email_metadata
-  const result = await exec(dealStates.syncFromEmailMetadata(schema, emailCoreSchema));
-  const count = Array.isArray(result) ? result.length : 0;
-  console.log(`[sync-deal-states] synced: ${count} rows`);
+  // 1. Sync new rows from email_metadata in chunks
+  const SYNC_CHUNK_SIZE = 500;
+  let totalSynced = 0;
+  let chunk = 0;
+  while (true) {
+    chunk++;
+    const result = await exec(dealStates.syncFromEmailMetadata(schema, emailCoreSchema, SYNC_CHUNK_SIZE));
+    const count = Array.isArray(result) ? result.length : 0;
+    totalSynced += count;
+    console.log(`[sync-deal-states] chunk ${chunk}: synced ${count} rows (total: ${totalSynced})`);
+    if (count < SYNC_CHUNK_SIZE) break
+  }
+  const count = totalSynced;
 
   // 2. Dead-letter batches stuck in active statuses with >= 3 batch_events
   const filterFailed = await deadLetterExhausted(exec, schema, STATUS.FILTERING, 'filter');
