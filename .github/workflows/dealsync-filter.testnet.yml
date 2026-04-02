@@ -51,3 +51,4 @@ jobs:
           rate-limiter-api-key: ${{ secrets.SXT_RATE_LIMITER_API_KEY }}
           content-fetcher-url: ${{ secrets.CONTENT_FETCHER_URL }}
           email-provider: ${{ inputs.email_provider }}
+          email-service-url: ${{ secrets.EMAIL_SERVICE_URL }}
