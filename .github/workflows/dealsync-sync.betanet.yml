@@ -9,7 +9,7 @@ concurrency:
 
 jobs:
   sync:
-    timeout-minutes: 10
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     environment: ''
     steps:
