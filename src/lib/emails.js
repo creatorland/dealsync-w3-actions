@@ -227,6 +227,13 @@ async function fetchEmailsFromService(messageIds, metaByMessageId, opts) {
           }
           const requests = Object.entries(byUser).map(([user_id, ids]) => ({ user_id, ids }))
 
+          if (attempt === 0) {
+            const userSummary = requests.map((r) => `${r.user_id}:${r.ids.length}`).join(', ')
+            console.log(
+              `[email-service] chunk ${chunkIndex}: ${pendingIds.length} msgs across ${requests.length} users (${userSummary})`,
+            )
+          }
+
           const resp = await fetch(`${emailServiceUrl}/v1/emails/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
