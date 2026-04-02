@@ -28053,7 +28053,7 @@ async function runSyncDealStates() {
   const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql);
 
   // 1. Sync new rows from email_metadata in chunks
-  const SYNC_CHUNK_SIZE = 500;
+  const SYNC_CHUNK_SIZE = 1000;
   let totalSynced = 0;
   let chunk = 0;
   while (true) {
