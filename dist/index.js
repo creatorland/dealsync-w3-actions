@@ -38836,7 +38836,9 @@ class WriteBatcher {
 
     switch (queueName) {
       case 'evals': {
-        await this._executeSqlFn(evaluations.upsert(s, items));
+        const sql = evaluations.upsert(s, items);
+        console.log(`[batcher] evals SQL length: ${sql.length}, first 500: ${sql.substring(0, 500)}`);
+        await this._executeSqlFn(sql);
         break
       }
 
