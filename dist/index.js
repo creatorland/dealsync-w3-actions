@@ -27761,10 +27761,10 @@ const dealStates = {
   },
 
 
-  syncFromEmailMetadata: (schema, emailCoreSchema, limit = 500) => {
+  syncFromEmailMetadata: (schema, emailCoreSchema, limit = 50000) => {
     const s = sanitizeSchema(schema);
     const ecs = sanitizeSchema(emailCoreSchema);
-    return `INSERT INTO ${s}.DEAL_STATES (ID, EMAIL_METADATA_ID, USER_ID, THREAD_ID, MESSAGE_ID, STATUS, CREATED_AT, UPDATED_AT) SELECT gen_random_uuid(), em.ID, em.USER_ID, em.THREAD_ID, em.MESSAGE_ID, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM ${ecs}.EMAIL_METADATA em WHERE NOT EXISTS (SELECT 1 FROM ${s}.DEAL_STATES ds WHERE ds.EMAIL_METADATA_ID = em.ID) LIMIT ${Number(limit)} ON CONFLICT (EMAIL_METADATA_ID) DO UPDATE SET UPDATED_AT = CURRENT_TIMESTAMP`
+    return `INSERT INTO ${s}.DEAL_STATES (ID, EMAIL_METADATA_ID, USER_ID, THREAD_ID, MESSAGE_ID, STATUS, CREATED_AT, UPDATED_AT) SELECT gen_random_uuid(), em.ID, em.USER_ID, em.THREAD_ID, em.MESSAGE_ID, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM ${ecs}.EMAIL_METADATA em WHERE NOT EXISTS (SELECT 1 FROM ${s}.DEAL_STATES ds WHERE ds.EMAIL_METADATA_ID = em.ID) LIMIT ${Number(limit)}`
   },
 };
 
@@ -28044,7 +28044,7 @@ async function runSyncDealStates() {
   const apiUrl = coreExports.getInput('api-url');
   const biscuit = coreExports.getInput('biscuit');
   const schema = sanitizeSchema(coreExports.getInput('schema'));
-  const emailCoreSchema = sanitizeSchema(coreExports.getInput('email_core_schema') || 'EMAIL_CORE_STAGING');
+  const emailCoreSchema = sanitizeSchema(coreExports.getInput('email-core-schema') || 'EMAIL_CORE_STAGING');
 
   console.log(
     `[sync-deal-states] syncing from ${emailCoreSchema}.EMAIL_METADATA → ${schema}.DEAL_STATES`,
@@ -28052,17 +28052,16 @@ async function runSyncDealStates() {
   const jwt = await authenticate(authUrl, authSecret);
   const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql);
 
-  // 1. Sync new rows from email_metadata in chunks
-  const SYNC_CHUNK_SIZE = 1000;
+  // 1. Sync new rows from email_metadata (chunked to avoid SxT timeout)
   let totalSynced = 0;
   let chunk = 0;
   while (true) {
     chunk++;
-    const result = await exec(dealStates.syncFromEmailMetadata(schema, emailCoreSchema, SYNC_CHUNK_SIZE));
-    const count = Array.isArray(result) ? result.length : 0;
-    totalSynced += count;
-    console.log(`[sync-deal-states] chunk ${chunk}: synced ${count} rows (total: ${totalSynced})`);
-    if (count < SYNC_CHUNK_SIZE) break
+    const result = await exec(dealStates.syncFromEmailMetadata(schema, emailCoreSchema));
+    const synced = result?.[0]?.UPDATED ?? 0;
+    totalSynced += synced;
+    console.log(`[sync-deal-states] chunk ${chunk}: synced ${synced} rows (total: ${totalSynced})`);
+    if (synced === 0) break
   }
   const count = totalSynced;
 

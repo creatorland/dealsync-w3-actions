@@ -11,7 +11,7 @@ jobs:
   sync:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    environment: ''
+    environment: '0xe48f697fafee74347f1c089a4778effaa2010651569f9ba0abeef155cb362f2e'
     steps:
       - id: sync
         name: Sync deal states from email metadata
@@ -25,3 +25,4 @@ jobs:
           schema: ${{ secrets.SXT_SCHEMA }}
           rate-limiter-url: ${{ secrets.SXT_RATE_LIMITER_URL }}
           rate-limiter-api-key: ${{ secrets.SXT_RATE_LIMITER_API_KEY }}
+          email-core-schema: EMAIL_CORE_PROD

@@ -23,7 +23,7 @@ export async function runSyncDealStates() {
   const apiUrl = core.getInput('api-url')
   const biscuit = core.getInput('biscuit')
   const schema = sanitizeSchema(core.getInput('schema'))
-  const emailCoreSchema = sanitizeSchema(core.getInput('email_core_schema') || 'EMAIL_CORE_STAGING')
+  const emailCoreSchema = sanitizeSchema(core.getInput('email-core-schema') || 'EMAIL_CORE_STAGING')
 
   console.log(
     `[sync-deal-states] syncing from ${emailCoreSchema}.EMAIL_METADATA → ${schema}.DEAL_STATES`,
@@ -31,17 +31,16 @@ export async function runSyncDealStates() {
   const jwt = await authenticate(authUrl, authSecret)
   const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql)
 
-  // 1. Sync new rows from email_metadata in chunks
-  const SYNC_CHUNK_SIZE = 1000
+  // 1. Sync new rows from email_metadata (chunked to avoid SxT timeout)
   let totalSynced = 0
   let chunk = 0
   while (true) {
     chunk++
-    const result = await exec(dealStatesSql.syncFromEmailMetadata(schema, emailCoreSchema, SYNC_CHUNK_SIZE))
-    const count = Array.isArray(result) ? result.length : 0
-    totalSynced += count
-    console.log(`[sync-deal-states] chunk ${chunk}: synced ${count} rows (total: ${totalSynced})`)
-    if (count < SYNC_CHUNK_SIZE) break
+    const result = await exec(dealStatesSql.syncFromEmailMetadata(schema, emailCoreSchema))
+    const synced = result?.[0]?.UPDATED ?? 0
+    totalSynced += synced
+    console.log(`[sync-deal-states] chunk ${chunk}: synced ${synced} rows (total: ${totalSynced})`)
+    if (synced === 0) break
   }
   const count = totalSynced
 
