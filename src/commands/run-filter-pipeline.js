@@ -47,6 +47,7 @@ export async function runFilterPipeline() {
   // Accumulate totals across all batches
   let totalFiltered = 0
   let totalRejected = 0
+  let totalClaimed = 0
 
   let batchCount = 0
   const runStart = Date.now()
@@ -111,10 +112,16 @@ export async function runFilterPipeline() {
       const count = rows ? rows.length : 0
       const claimMs = Date.now() - claimStart
       batchCount++
-      console.log(`[run-filter-pipeline] mega-claimed ${count} pending rows (claimMs=${claimMs}, batch #${batchCount})`)
+      totalClaimed += count
+      const elapsed = ((Date.now() - runStart) / 1000).toFixed(1)
+      console.log(`[run-filter-pipeline] mega-claimed ${count} rows in ${claimMs}ms (claim #${batchCount}, total claimed: ${totalClaimed}, elapsed: ${elapsed}s)`)
 
       if (count > 0) {
-        return await megaSplit(megaBatchId, rows, 0)
+        const splitStart = Date.now()
+        const subBatches = await megaSplit(megaBatchId, rows, 0)
+        const splitMs = Date.now() - splitStart
+        console.log(`[run-filter-pipeline] mega-claim #${batchCount}: ${count} rows → ${subBatches.length} sub-batches of ${batchSize} (splitMs=${splitMs})`)
+        return subBatches
       }
     } else {
       // --- Standard single-batch claim path ---
@@ -127,7 +134,9 @@ export async function runFilterPipeline() {
       const count = rows ? rows.length : 0
       const claimMs = Date.now() - claimStart
       batchCount++
-      console.log(`[run-filter-pipeline] claimed ${count} pending rows (claimMs=${claimMs}, batch #${batchCount})`)
+      totalClaimed += count
+      const elapsed = ((Date.now() - runStart) / 1000).toFixed(1)
+      console.log(`[run-filter-pipeline] claimed ${count} rows in ${claimMs}ms (claim #${batchCount}, total claimed: ${totalClaimed}, elapsed: ${elapsed}s)`)
 
       if (count > 0) {
         await insertBatchEvent(exec, schema, {
@@ -199,7 +208,8 @@ export async function runFilterPipeline() {
     const { batch_id, rows } = batch
     const batchStart = Date.now()
 
-    console.log(`[run-filter-pipeline] processing batch ${batch_id} (${rows.length} rows)`)
+    const elapsed = ((Date.now() - runStart) / 1000).toFixed(1)
+    console.log(`[run-filter-pipeline] processing batch ${batch_id} (${rows.length} rows, elapsed: ${elapsed}s)`)
 
     // Acquire rate limit tokens in bulk (2 UPDATEs + 1 batch event)
     let t0 = Date.now()
@@ -238,8 +248,10 @@ export async function runFilterPipeline() {
       }
     }
 
+    const fetched = emails.length
+    const unfetched = messageIds.length - fetched
     console.log(
-      `[run-filter-pipeline] batch ${batch_id}: ${filteredIds.length} passed, ${rejectedIds.length} rejected`,
+      `[run-filter-pipeline] batch ${batch_id}: fetched ${fetched}/${messageIds.length} emails in ${fetchMs}ms, ${filteredIds.length} passed, ${rejectedIds.length} rejected${unfetched > 0 ? `, ${unfetched} unfetched` : ''}`,
     )
 
     // d. UPDATE passed IDs -> pending_classification
@@ -267,13 +279,16 @@ export async function runFilterPipeline() {
     })
 
     const totalMs = Date.now() - batchStart
-    console.log(
-      `[run-filter-pipeline] batch ${batch_id} done: totalMs=${totalMs} fetchMs=${fetchMs} writeMs=${writeMs} rlMs=${rlMs} rows=${rows.length}`,
-    )
 
     // g. Accumulate totals
     totalFiltered += filteredIds.length
     totalRejected += rejectedIds.length
+
+    const progress = totalFiltered + totalRejected
+    const rowsPerSec = progress > 0 ? (progress / ((Date.now() - runStart) / 1000)).toFixed(1) : '0'
+    console.log(
+      `[run-filter-pipeline] batch ${batch_id} done in ${totalMs}ms (fetch=${fetchMs}ms, write=${writeMs}ms, rl=${rlMs}ms) | progress: ${progress} rows processed, ${rowsPerSec} rows/sec`,
+    )
   }
 
   // 5. Dead-letter: persist failed status when pool gives up on a batch
@@ -307,9 +322,11 @@ export async function runFilterPipeline() {
   })
 
   const runMs = Date.now() - runStart
+  const totalProcessed = totalFiltered + totalRejected
+  const throughput = totalProcessed > 0 ? ((totalProcessed / runMs) * 3600000).toFixed(0) : '0'
   logSqlStats()
   console.log(
-    `[run-filter-pipeline] done — batches_processed=${poolResults.processed}, batches_failed=${poolResults.failed}, total_filtered=${totalFiltered}, total_rejected=${totalRejected}, stuck_failed=${stuckFailed}, runMs=${runMs}`,
+    `[run-filter-pipeline] done — ${totalProcessed} rows in ${(runMs / 1000).toFixed(1)}s (${throughput} rows/hr) | passed=${totalFiltered}, rejected=${totalRejected}, batches=${poolResults.processed}, failed=${poolResults.failed}, stuck_failed=${stuckFailed}`,
   )
 
   return {
