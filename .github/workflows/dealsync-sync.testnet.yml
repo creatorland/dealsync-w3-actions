@@ -27,4 +27,4 @@ jobs:
           sxt-rate-limiter-url: ${{ secrets.SXT_RATE_LIMITER_URL }}
           sxt-rate-limiter-api-key: ${{ secrets.SXT_RATE_LIMITER_API_KEY }}
           email-core-schema: ${{ secrets.EMAIL_CORE_SCHEMA }}
-          sxt-max-retries: ${{ secrets.SXT_MAX_RETRIES }}
+          db-max-retries: ${{ secrets.DB_MAX_RETRIES }}

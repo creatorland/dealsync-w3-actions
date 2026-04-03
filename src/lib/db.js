@@ -16,7 +16,7 @@ import { sleep, backoffMs } from './retry.js'
 
 const SQL_TIMEOUT_MS = 120000
 const AUTH_TIMEOUT_MS = 30000
-const MAX_RETRIES = parseInt(core.getInput('sxt-max-retries') || '6', 10)
+const MAX_RETRIES = parseInt(core.getInput('db-max-retries') || '6', 10)
 
 let cachedJwt = null
 let reauthPromise = null

@@ -89,7 +89,7 @@ inputs:
   pipeline-flush-threshold:
     description: 'Write batcher flush threshold per queue (run-classify-pipeline)'
     default: '5'
-  sxt-max-retries:
+  db-max-retries:
     description: 'Max HTTP retries for SxT database calls'
     default: '6'
   ai-max-retries:

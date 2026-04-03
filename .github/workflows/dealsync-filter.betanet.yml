@@ -37,5 +37,5 @@ jobs:
           pipeline-max-retries: ${{ secrets.PIPELINE_MAX_RETRIES }}
           pipeline-fetch-chunk-size: ${{ secrets.PIPELINE_FETCH_CHUNK_SIZE }}
           pipeline-fetch-timeout-ms: ${{ secrets.PIPELINE_FETCH_TIMEOUT_MS }}
-          sxt-max-retries: ${{ secrets.SXT_MAX_RETRIES }}
+          db-max-retries: ${{ secrets.DB_MAX_RETRIES }}
           email-max-retries: ${{ secrets.EMAIL_MAX_RETRIES }}
