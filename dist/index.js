@@ -27670,6 +27670,7 @@ const STATUS = {
   NOT_DEAL: 'not_deal',
   FILTER_REJECTED: 'filter_rejected',
   FAILED: 'failed',
+  DEAD: 'dead',
 };
 
 const dealStates = {
@@ -27781,6 +27782,22 @@ const dealStates = {
       return `WHEN THREAD_ID IN (${ids}) THEN '${sid}'`
     }).join(' ');
     return `UPDATE ${s}.DEAL_STATES SET BATCH_ID = CASE ${cases} END, UPDATED_AT = CURRENT_TIMESTAMP WHERE BATCH_ID = '${megaBid}'`
+  },
+
+  findUsersWithFailedRows: (schema, limit = 200) => {
+    const s = sanitizeSchema(schema);
+    return `SELECT USER_ID, MIN(UPDATED_AT) AS OLDEST FROM ${s}.DEAL_STATES WHERE STATUS = 'failed' GROUP BY USER_ID ORDER BY OLDEST ASC LIMIT ${Number(limit)}`
+  },
+
+  selectFailedByUser: (schema, userId, limit = 500) => {
+    const s = sanitizeSchema(schema);
+    const uid = sanitizeString(userId);
+    return `SELECT ID, EMAIL_METADATA_ID, MESSAGE_ID, USER_ID, THREAD_ID, SYNC_STATE_ID FROM ${s}.DEAL_STATES WHERE STATUS = 'failed' AND USER_ID = '${uid}' ORDER BY UPDATED_AT ASC LIMIT ${Number(limit)}`
+  },
+
+  resetToPending: (schema, quotedIds) => {
+    const s = sanitizeSchema(schema);
+    return `UPDATE ${s}.DEAL_STATES SET STATUS = 'pending', BATCH_ID = NULL, UPDATED_AT = CURRENT_TIMESTAMP WHERE EMAIL_METADATA_ID IN (${quotedIds.join(',')})`
   },
 
   syncFromEmailMetadata: (schema, emailCoreSchema, limit = 50000) => {
@@ -39814,12 +39831,160 @@ async function runClassifyPipeline() {
   }
 }
 
+async function runRecoveryPipeline() {
+  const authUrl = coreExports.getInput('sxt-auth-url');
+  const authSecret = coreExports.getInput('sxt-auth-secret');
+  const apiUrl = coreExports.getInput('sxt-api-url');
+  const biscuit = coreExports.getInput('sxt-biscuit');
+  const schema = sanitizeSchema(coreExports.getInput('sxt-schema'));
+  const contentFetcherUrl = coreExports.getInput('email-content-fetcher-url');
+  const emailProvider = coreExports.getInput('email-provider') || '';
+  const emailServiceUrl = coreExports.getInput('email-service-url');
+  const maxConcurrent = parseInt(coreExports.getInput('pipeline-recovery-max-concurrent') || '10', 10);
+  const claimSize = parseInt(coreExports.getInput('recovery-claim-size') || '500', 10);
+  const fetchChunkSize = parseInt(coreExports.getInput('pipeline-fetch-chunk-size') || '10', 10);
+  const fetchTimeoutMs = parseInt(coreExports.getInput('pipeline-fetch-timeout-ms') || '30000', 10);
+  const maxRetries = parseInt(coreExports.getInput('pipeline-max-retries') || '2', 10);
+
+  console.log(
+    `[run-recovery-pipeline] starting (maxConcurrent=${maxConcurrent}, claimSize=${claimSize}, fetchChunkSize=${fetchChunkSize}, fetchTimeoutMs=${fetchTimeoutMs})`,
+  );
+
+  const jwt = await authenticate(authUrl, authSecret);
+  const exec = (sql) => executeSql(apiUrl, jwt, biscuit, sql);
+
+  let totalRecovered = 0;
+  let totalDead = 0;
+  let usersProcessed = 0;
+  const runStart = Date.now();
+
+  // Claim function: get next user with failed rows
+  let userQueue = [];
+  let userQueueExhausted = false;
+
+  async function claimBatch() {
+    // Refill user queue if empty
+    if (userQueue.length === 0 && !userQueueExhausted) {
+      const users = await exec(dealStates.findUsersWithFailedRows(schema));
+      if (!users || users.length === 0) {
+        userQueueExhausted = true;
+        return null
+      }
+      userQueue = users;
+      console.log(`[run-recovery-pipeline] found ${users.length} users with failed rows`);
+    }
+
+    if (userQueue.length === 0) return null
+
+    const user = userQueue.shift();
+    const userId = user.USER_ID;
+
+    // Select failed rows for this user
+    const rows = await exec(dealStates.selectFailedByUser(schema, userId, claimSize));
+    if (!rows || rows.length === 0) return null
+
+    const elapsed = ((Date.now() - runStart) / 1000).toFixed(1);
+    console.log(
+      `[run-recovery-pipeline] claimed ${rows.length} failed rows for user ${userId} (elapsed: ${elapsed}s)`,
+    );
+
+    return { batch_id: `recovery:${userId}`, count: rows.length, attempts: 0, rows, userId }
+  }
+
+  // Worker function: check fetchability and update statuses
+  async function processRecoveryBatch(batch) {
+    const { rows, userId } = batch;
+    const batchStart = Date.now();
+
+    const metaByMessageId = new Map(rows.map((r) => [r.MESSAGE_ID, r]));
+    const syncStateId = rows[0].SYNC_STATE_ID;
+    const messageIds = rows.map((r) => r.MESSAGE_ID);
+
+    // Fetch with metadata-only format
+    let emails = [];
+    try {
+      emails = await fetchEmails(messageIds, metaByMessageId, {
+        contentFetcherUrl,
+        emailProvider,
+        emailServiceUrl,
+        userId,
+        syncStateId,
+        chunkSize: fetchChunkSize,
+        fetchTimeoutMs,
+        format: 'metadata',
+      });
+    } catch (err) {
+      console.log(
+        `[run-recovery-pipeline] fetch failed for user ${userId}: ${err.message}`,
+      );
+      // All unfetchable on total failure
+      emails = [];
+    }
+
+    const fetchedMessageIds = new Set(emails.map((e) => e.messageId || e.id));
+
+    // Split into recoverable vs dead
+    const recoverableIds = [];
+    const deadIds = [];
+
+    for (const row of rows) {
+      if (fetchedMessageIds.has(row.MESSAGE_ID)) {
+        recoverableIds.push(row.EMAIL_METADATA_ID);
+      } else {
+        deadIds.push(row.EMAIL_METADATA_ID);
+      }
+    }
+
+    // Write: reset recoverable to pending (with BATCH_ID = NULL)
+    if (recoverableIds.length > 0) {
+      const quotedIds = recoverableIds.map((id) => `'${sanitizeId(id)}'`);
+      await exec(dealStates.resetToPending(schema, quotedIds));
+    }
+
+    // Write: mark dead
+    if (deadIds.length > 0) {
+      const quotedIds = deadIds.map((id) => `'${sanitizeId(id)}'`);
+      await exec(dealStates.updateStatusByIds(schema, quotedIds, STATUS.DEAD));
+    }
+
+    totalRecovered += recoverableIds.length;
+    totalDead += deadIds.length;
+    usersProcessed++;
+
+    const totalMs = Date.now() - batchStart;
+    const elapsed = ((Date.now() - runStart) / 1000).toFixed(1);
+    console.log(
+      `[run-recovery-pipeline] user ${userId}: ${recoverableIds.length} recovered, ${deadIds.length} dead (${totalMs}ms) | total: recovered=${totalRecovered}, dead=${totalDead}, users=${usersProcessed}, elapsed=${elapsed}s`,
+    );
+  }
+
+  const poolResults = await runPool(claimBatch, processRecoveryBatch, {
+    maxConcurrent,
+    maxRetries,
+    onDeadLetter: async () => {},
+  });
+
+  const runMs = Date.now() - runStart;
+  console.log(
+    `[run-recovery-pipeline] done — recovered=${totalRecovered}, dead=${totalDead}, users=${usersProcessed}, batches=${poolResults.processed}, failed=${poolResults.failed} (${(runMs / 1000).toFixed(1)}s)`,
+  );
+
+  return {
+    total_recovered: totalRecovered,
+    total_dead: totalDead,
+    users_processed: usersProcessed,
+    batches_processed: poolResults.processed,
+    batches_failed: poolResults.failed,
+  }
+}
+
 const COMMANDS = {
   'sync-deal-states': runSyncDealStates,
   eval: runEval,
   'eval-compare': runEvalCompare,
   'run-filter-pipeline': runFilterPipeline,
   'run-classify-pipeline': runClassifyPipeline,
+  'run-recovery-pipeline': runRecoveryPipeline,
 };
 
 async function run() {

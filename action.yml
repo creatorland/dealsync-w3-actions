@@ -1,5 +1,5 @@
 name: 'Dealsync'
-description: 'Dealsync pipeline action — run-filter-pipeline, run-classify-pipeline, sync-deal-states, eval, eval-compare'
+description: 'Dealsync pipeline action — run-filter-pipeline, run-classify-pipeline, run-recovery-pipeline, sync-deal-states, eval, eval-compare'
 author: 'creatorland'
 
 inputs:
@@ -86,6 +86,12 @@ inputs:
   pipeline-claim-size:
     description: 'Threads per mega-claim (run-classify-pipeline). Higher = fewer SxT round-trips. Each mega-claim is split into sub-batches of classify-batch-size for AI.'
     default: '5'
+  pipeline-recovery-max-concurrent:
+    description: 'Max parallel users for recovery pipeline'
+    default: '10'
+  recovery-claim-size:
+    description: 'Max failed rows per user per recovery run'
+    default: '500'
   pipeline-max-retries:
     description: 'Max attempts per batch before dead letter (run-filter-pipeline, run-classify-pipeline)'
     default: '6'

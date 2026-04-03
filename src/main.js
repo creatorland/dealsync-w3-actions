@@ -4,6 +4,7 @@ import { runEval } from './commands/eval.js'
 import { runEvalCompare } from './commands/eval-compare.js'
 import { runFilterPipeline } from './commands/run-filter-pipeline.js'
 import { runClassifyPipeline } from './commands/run-classify-pipeline.js'
+import { runRecoveryPipeline } from './commands/run-recovery-pipeline.js'
 
 const COMMANDS = {
   'sync-deal-states': runSyncDealStates,
@@ -11,6 +12,7 @@ const COMMANDS = {
   'eval-compare': runEvalCompare,
   'run-filter-pipeline': runFilterPipeline,
   'run-classify-pipeline': runClassifyPipeline,
+  'run-recovery-pipeline': runRecoveryPipeline,
 }
 
 export async function run() {
