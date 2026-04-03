@@ -48,6 +48,9 @@ export async function runClassifyPipeline() {
   console.log(
     `[run-classify-pipeline] starting (maxConcurrent=${maxConcurrent}, batchSize=${classifyBatchSize}, claimSize=${claimSize}, maxRetries=${maxRetries}, fetchChunkSize=${fetchChunkSize}, fetchTimeoutMs=${fetchTimeoutMs})`,
   )
+  console.log(
+    `[run-classify-pipeline] config: primaryModel=${primaryModel}, fallbackModel=${fallbackModel}, aiApiUrl=${aiApiUrl ? aiApiUrl.substring(0, 40) : '(empty)'}, schema=${schema}, emailProvider=${emailProvider || '(empty)'}, apiKey=${hyperbolicKey ? hyperbolicKey.substring(0, 10) + '...' : '(empty)'}`,
+  )
 
   // 1. Authenticate to SxT once at start
   const jwt = await authenticate(authUrl, authSecret)
