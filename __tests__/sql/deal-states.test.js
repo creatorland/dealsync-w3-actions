@@ -142,6 +142,22 @@ describe('dealStates', () => {
     })
   })
 
+  describe('restampFilterSubBatches', () => {
+    it('builds CASE WHEN UPDATE using EMAIL_METADATA_ID', () => {
+      const groups = [
+        { subBatchId: 'sub-1', emailMetadataIds: ['em1', 'em2', 'em3'] },
+        { subBatchId: 'sub-2', emailMetadataIds: ['em4', 'em5'] },
+      ]
+      const sql = dealStates.restampFilterSubBatches(S, 'mega:mega-id', groups)
+      expect(sql).toContain(`UPDATE ${S}.DEAL_STATES`)
+      expect(sql).toContain('SET BATCH_ID = CASE')
+      expect(sql).toContain("WHEN EMAIL_METADATA_ID IN ('em1','em2','em3') THEN 'sub-1'")
+      expect(sql).toContain("WHEN EMAIL_METADATA_ID IN ('em4','em5') THEN 'sub-2'")
+      expect(sql).toContain('END')
+      expect(sql).toContain("WHERE BATCH_ID = 'mega:mega-id'")
+    })
+  })
+
   describe('restampSubBatches', () => {
     it('builds CASE WHEN UPDATE for sub-batch assignment', () => {
       const groups = [

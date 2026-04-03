@@ -580,7 +580,7 @@ describe('run-filter-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('claim uses correct SQL for pending rows', async () => {
-    mockInputs({ 'filter-batch-size': '100' })
+    mockInputs({ 'filter-batch-size': '100', 'claim-size': '100' })
 
     mockRunPool.mockImplementation(async (claimFn) => {
       mockExecuteSql
@@ -790,6 +790,154 @@ describe('run-filter-pipeline command', () => {
       total_rejected: 0,
       stuck_failed: 0,
     })
+  })
+
+  // ----------------------------------------------------------
+  // exec helper passes correct args to executeSql
+  // ----------------------------------------------------------
+
+  // ----------------------------------------------------------
+  // Mega-claim: when claimSize > batchSize, returns array of sub-batches
+  // ----------------------------------------------------------
+
+  it('mega-claim splits into sub-batches when claimSize > batchSize', async () => {
+    mockInputs({ 'filter-batch-size': '2', 'claim-size': '6' })
+
+    // 5 rows total → should produce 3 sub-batches (2, 2, 1)
+    const rows = makeBatchRows(5)
+
+    mockRunPool.mockImplementation(async (claimFn, workerFn) => {
+      mockExecuteSql
+        .mockResolvedValueOnce([]) // UPDATE mega-claim
+        .mockResolvedValueOnce(rows) // SELECT mega-claimed rows
+        .mockResolvedValueOnce([]) // restamp UPDATE
+
+      const result = await claimFn()
+
+      // Should return an array of sub-batches
+      expect(Array.isArray(result)).toBe(true)
+      expect(result.length).toBe(3)
+
+      // Sub-batch 1: 2 rows
+      expect(result[0].count).toBe(2)
+      expect(result[0].rows).toEqual(rows.slice(0, 2))
+      expect(result[0].attempts).toBe(0)
+
+      // Sub-batch 2: 2 rows
+      expect(result[1].count).toBe(2)
+      expect(result[1].rows).toEqual(rows.slice(2, 4))
+
+      // Sub-batch 3: 1 row
+      expect(result[2].count).toBe(1)
+      expect(result[2].rows).toEqual(rows.slice(4, 5))
+
+      // Should have inserted batch events for each sub-batch
+      expect(mockInsertBatchEvent).toHaveBeenCalledTimes(3)
+      for (let i = 0; i < 3; i++) {
+        expect(mockInsertBatchEvent).toHaveBeenCalledWith(
+          expect.any(Function),
+          'dealsync_stg_v1',
+          expect.objectContaining({
+            batchType: 'filter',
+            eventType: 'new',
+          }),
+        )
+      }
+
+      return { processed: 3, failed: 0 }
+    })
+
+    await runFilterPipeline()
+  })
+
+  // ----------------------------------------------------------
+  // Backward compat: when claimSize <= batchSize, returns single object
+  // ----------------------------------------------------------
+
+  it('returns single batch object when claimSize <= batchSize', async () => {
+    mockInputs({ 'filter-batch-size': '200', 'claim-size': '200' })
+
+    const rows = makeBatchRows(3)
+
+    mockRunPool.mockImplementation(async (claimFn) => {
+      mockExecuteSql
+        .mockResolvedValueOnce([]) // UPDATE claim
+        .mockResolvedValueOnce(rows) // SELECT claimed rows
+
+      const result = await claimFn()
+
+      // Should return a single object, not an array
+      expect(Array.isArray(result)).toBe(false)
+      expect(result).toEqual({
+        batch_id: expect.any(String),
+        count: 3,
+        attempts: 0,
+        rows,
+      })
+
+      // Should have inserted one batch event
+      expect(mockInsertBatchEvent).toHaveBeenCalledTimes(1)
+
+      return { processed: 1, failed: 0 }
+    })
+
+    await runFilterPipeline()
+  })
+
+  // ----------------------------------------------------------
+  // Stuck mega recovery: re-splits stuck mega: batches
+  // ----------------------------------------------------------
+
+  it('re-splits stuck mega batch on recovery', async () => {
+    mockInputs({ 'filter-batch-size': '2', 'claim-size': '6' })
+
+    const stuckRows = makeBatchRows(4)
+
+    mockRunPool.mockImplementation(async (claimFn) => {
+      mockExecuteSql
+        .mockResolvedValueOnce([]) // UPDATE mega-claim
+        .mockResolvedValueOnce([]) // SELECT mega-claimed — empty (no pending rows)
+        .mockResolvedValueOnce([{ BATCH_ID: 'mega:stuck-mega-1', ATTEMPTS: 2 }]) // stuck batches
+        .mockResolvedValueOnce(stuckRows) // SELECT stuck rows
+        .mockResolvedValueOnce([]) // refreshBatchTimestamp
+        .mockResolvedValueOnce([]) // restamp UPDATE
+
+      const result = await claimFn()
+
+      // Should return an array of sub-batches from mega-split
+      expect(Array.isArray(result)).toBe(true)
+      expect(result.length).toBe(2) // 4 rows / 2 batchSize = 2 sub-batches
+      expect(result[0].count).toBe(2)
+      expect(result[1].count).toBe(2)
+      expect(result[0].attempts).toBe(2)
+      expect(result[1].attempts).toBe(2)
+
+      return { processed: 2, failed: 0 }
+    })
+
+    await runFilterPipeline()
+  })
+
+  // ----------------------------------------------------------
+  // Mega-claim with no pending rows returns null
+  // ----------------------------------------------------------
+
+  it('mega-claim returns null when no pending rows and no stuck batches', async () => {
+    mockInputs({ 'filter-batch-size': '2', 'claim-size': '6' })
+
+    mockRunPool.mockImplementation(async (claimFn) => {
+      mockExecuteSql
+        .mockResolvedValueOnce([]) // UPDATE mega-claim
+        .mockResolvedValueOnce([]) // SELECT mega-claimed — empty
+        .mockResolvedValueOnce([]) // stuck batches — empty
+
+      const result = await claimFn()
+      expect(result).toBeNull()
+
+      return { processed: 0, failed: 0 }
+    })
+
+    await runFilterPipeline()
   })
 
   // ----------------------------------------------------------

@@ -31,9 +31,10 @@ export async function runFilterPipeline() {
   const maxRetries = parseInt(core.getInput('max-retries') || '6', 10)
   const fetchChunkSize = parseInt(core.getInput('fetch-chunk-size') || core.getInput('chunk-size') || '10', 10)
   const fetchTimeoutMs = parseInt(core.getInput('fetch-timeout-ms') || '30000', 10)
+  const claimSize = parseInt(core.getInput('claim-size') || '200', 10)
 
   console.log(
-    `[run-filter-pipeline] starting (maxConcurrent=${maxConcurrent}, batchSize=${batchSize}, maxRetries=${maxRetries}, fetchChunkSize=${fetchChunkSize}, fetchTimeoutMs=${fetchTimeoutMs})`,
+    `[run-filter-pipeline] starting (maxConcurrent=${maxConcurrent}, batchSize=${batchSize}, claimSize=${claimSize}, maxRetries=${maxRetries}, fetchChunkSize=${fetchChunkSize}, fetchTimeoutMs=${fetchTimeoutMs})`,
   )
 
   // 1. Authenticate to SxT once at start
@@ -50,32 +51,94 @@ export async function runFilterPipeline() {
   let batchCount = 0
   const runStart = Date.now()
 
-  // 3. Define claimBatch() inline
-  async function claimBatch() {
-    const batchId = uuidv7()
-    const claimStart = Date.now()
+  // 3. Define megaSplit() and claimBatch() inline
 
-    // Atomically claim pending rows
-    await exec(dealStatesSql.claimFilterBatch(schema, batchId, batchSize))
+  /**
+   * Split a mega-batch into sub-batches of batchSize rows each,
+   * restamp in DB, insert batch events, and return sub-batch objects.
+   */
+  async function megaSplit(megaBatchId, allRows, attempts) {
+    const chunks = []
+    for (let i = 0; i < allRows.length; i += batchSize) {
+      chunks.push(allRows.slice(i, i + batchSize))
+    }
 
-    // SELECT the claimed rows
-    const rows = await exec(dealStatesSql.selectEmailsByBatch(schema, batchId))
+    const groups = chunks.map((chunkRows) => ({
+      subBatchId: uuidv7(),
+      emailMetadataIds: chunkRows.map((r) => r.EMAIL_METADATA_ID),
+    }))
 
-    const count = rows ? rows.length : 0
-    const claimMs = Date.now() - claimStart
-    batchCount++
-    console.log(`[run-filter-pipeline] claimed ${count} pending rows (claimMs=${claimMs}, batch #${batchCount})`)
+    // Restamp in DB
+    await exec(dealStatesSql.restampFilterSubBatches(schema, megaBatchId, groups))
 
-    // If claimed > 0, insert batch event and return
-    if (count > 0) {
+    // Insert batch events
+    for (const { subBatchId } of groups) {
       await insertBatchEvent(exec, schema, {
-        triggerHash: batchId,
-        batchId,
+        triggerHash: subBatchId,
+        batchId: subBatchId,
         batchType: 'filter',
         eventType: 'new',
       })
+    }
 
-      return { batch_id: batchId, count, attempts: 0, rows }
+    const subBatches = groups.map(({ subBatchId, emailMetadataIds }, i) => ({
+      batch_id: subBatchId,
+      count: chunks[i].length,
+      attempts,
+      rows: chunks[i],
+    }))
+
+    console.log(
+      `[run-filter-pipeline] mega-split ${megaBatchId}: ${allRows.length} rows → ${subBatches.length} sub-batches`,
+    )
+
+    return subBatches
+  }
+
+  async function claimBatch() {
+    const claimStart = Date.now()
+    const useMegaClaim = claimSize > batchSize
+
+    if (useMegaClaim) {
+      // --- Mega-claim path ---
+      const megaId = uuidv7()
+      const megaBatchId = `mega:${megaId}`
+
+      await exec(dealStatesSql.claimFilterBatch(schema, megaBatchId, claimSize))
+
+      const rows = await exec(dealStatesSql.selectEmailsByBatch(schema, megaBatchId))
+
+      const count = rows ? rows.length : 0
+      const claimMs = Date.now() - claimStart
+      batchCount++
+      console.log(`[run-filter-pipeline] mega-claimed ${count} pending rows (claimMs=${claimMs}, batch #${batchCount})`)
+
+      if (count > 0) {
+        return await megaSplit(megaBatchId, rows, 0)
+      }
+    } else {
+      // --- Standard single-batch claim path ---
+      const batchId = uuidv7()
+
+      await exec(dealStatesSql.claimFilterBatch(schema, batchId, batchSize))
+
+      const rows = await exec(dealStatesSql.selectEmailsByBatch(schema, batchId))
+
+      const count = rows ? rows.length : 0
+      const claimMs = Date.now() - claimStart
+      batchCount++
+      console.log(`[run-filter-pipeline] claimed ${count} pending rows (claimMs=${claimMs}, batch #${batchCount})`)
+
+      if (count > 0) {
+        await insertBatchEvent(exec, schema, {
+          triggerHash: batchId,
+          batchId,
+          batchType: 'filter',
+          eventType: 'new',
+        })
+
+        return { batch_id: batchId, count, attempts: 0, rows }
+      }
     }
 
     // No pending rows — look for stuck batches (filtering >5min, attempts < maxRetries)
@@ -92,13 +155,26 @@ export async function runFilterPipeline() {
 
     // Re-claim the stuck batch
     const stuckBatchId = stuckBatches[0].BATCH_ID
-    const attempts = stuckBatches[0].ATTEMPTS
+    const attempts = parseInt(stuckBatches[0].ATTEMPTS, 10)
 
     console.log(
       `[run-filter-pipeline] re-claiming stuck batch ${stuckBatchId} (attempts=${attempts})`,
     )
 
-    // SELECT its rows
+    // Check if this is a stuck mega-batch
+    if (stuckBatchId.startsWith('mega:')) {
+      const stuckRows = await exec(dealStatesSql.selectEmailsByBatch(schema, stuckBatchId))
+
+      await exec(dealStatesSql.refreshBatchTimestamp(schema, stuckBatchId))
+
+      const stuckCount = stuckRows ? stuckRows.length : 0
+      if (stuckCount > 0) {
+        return await megaSplit(stuckBatchId, stuckRows, attempts)
+      }
+      return null
+    }
+
+    // Standard stuck batch recovery
     const stuckRows = await exec(dealStatesSql.selectEmailsByBatch(schema, stuckBatchId))
 
     // UPDATE UPDATED_AT to prevent other instances from grabbing it
