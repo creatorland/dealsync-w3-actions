@@ -21,6 +21,7 @@ export const STATUS = {
   NOT_DEAL: 'not_deal',
   FILTER_REJECTED: 'filter_rejected',
   FAILED: 'failed',
+  DEAD: 'dead',
 }
 
 export const dealStates = {
@@ -132,6 +133,22 @@ export const dealStates = {
       return `WHEN THREAD_ID IN (${ids}) THEN '${sid}'`
     }).join(' ')
     return `UPDATE ${s}.DEAL_STATES SET BATCH_ID = CASE ${cases} END, UPDATED_AT = CURRENT_TIMESTAMP WHERE BATCH_ID = '${megaBid}'`
+  },
+
+  findUsersWithFailedRows: (schema, limit = 200) => {
+    const s = sanitizeSchema(schema)
+    return `SELECT USER_ID, MIN(UPDATED_AT) AS OLDEST FROM ${s}.DEAL_STATES WHERE STATUS = 'failed' GROUP BY USER_ID ORDER BY OLDEST ASC LIMIT ${Number(limit)}`
+  },
+
+  selectFailedByUser: (schema, userId, limit = 500) => {
+    const s = sanitizeSchema(schema)
+    const uid = sanitizeString(userId)
+    return `SELECT ID, EMAIL_METADATA_ID, MESSAGE_ID, USER_ID, THREAD_ID, SYNC_STATE_ID FROM ${s}.DEAL_STATES WHERE STATUS = 'failed' AND USER_ID = '${uid}' ORDER BY UPDATED_AT ASC LIMIT ${Number(limit)}`
+  },
+
+  resetToPending: (schema, quotedIds) => {
+    const s = sanitizeSchema(schema)
+    return `UPDATE ${s}.DEAL_STATES SET STATUS = 'pending', BATCH_ID = NULL, UPDATED_AT = CURRENT_TIMESTAMP WHERE EMAIL_METADATA_ID IN (${quotedIds.join(',')})`
   },
 
   syncFromEmailMetadata: (schema, emailCoreSchema, limit = 50000) => {
