@@ -113,23 +113,23 @@ const { runClassifyPipeline } = await import('../src/commands/run-classify-pipel
 
 function mockInputs(overrides = {}) {
   const defaults = {
-    'auth-url': 'https://auth.example.com/token',
-    'auth-secret': 'test-secret',
-    'api-url': 'https://sxt.example.com',
-    biscuit: 'test-biscuit',
-    schema: 'dealsync_stg_v1',
-    'content-fetcher-url': 'https://fetcher.example.com',
-    'hyperbolic-key': 'test-hyp-key',
-    'primary-model': 'TestPrimary/Model',
-    'fallback-model': 'TestFallback/Model',
+    'sxt-auth-url': 'https://auth.example.com/token',
+    'sxt-auth-secret': 'test-secret',
+    'sxt-api-url': 'https://sxt.example.com',
+    'sxt-biscuit': 'test-biscuit',
+    'sxt-schema': 'dealsync_stg_v1',
+    'email-content-fetcher-url': 'https://fetcher.example.com',
+    'ai-api-key': 'test-hyp-key',
+    'ai-primary-model': 'TestPrimary/Model',
+    'ai-fallback-model': 'TestFallback/Model',
     'ai-api-url': 'https://ai.example.com/v1/chat/completions',
-    'max-concurrent': '3',
-    'classify-batch-size': '5',
-    'max-retries': '3',
-    'chunk-size': '10',
-    'fetch-timeout-ms': '120000',
-    'flush-interval-ms': '5000',
-    'flush-threshold': '10',
+    'pipeline-max-concurrent': '3',
+    'pipeline-classify-batch-size': '5',
+    'pipeline-max-retries': '3',
+    'pipeline-fetch-chunk-size': '10',
+    'pipeline-fetch-timeout-ms': '120000',
+    'pipeline-flush-interval-ms': '5000',
+    'pipeline-flush-threshold': '10',
     ...overrides,
   }
   core.getInput.mockImplementation((name) => defaults[name] ?? '')
@@ -205,7 +205,7 @@ describe('run-classify-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('creates WriteBatcher with correct params', async () => {
-    mockInputs({ 'flush-interval-ms': '3000', 'flush-threshold': '20' })
+    mockInputs({ 'pipeline-flush-interval-ms': '3000', 'pipeline-flush-threshold': '20' })
 
     mockRunPool.mockResolvedValue({ processed: 0, failed: 0 })
 
@@ -389,7 +389,7 @@ describe('run-classify-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('passes correct params to fetchEmails (no format = full content)', async () => {
-    mockInputs({ 'chunk-size': '15', 'fetch-timeout-ms': '60000' })
+    mockInputs({ 'pipeline-fetch-chunk-size': '15', 'pipeline-fetch-timeout-ms': '60000' })
 
     const rows = makeBatchRows(2)
     const threads = makeThreads(rows)
@@ -435,7 +435,7 @@ describe('run-classify-pipeline command', () => {
     expect(metaMap.get('msg-1')).toEqual(rows[0])
     expect(opts).toEqual({
       contentFetcherUrl: 'https://fetcher.example.com',
-      emailProvider: 'content-fetcher',
+      emailProvider: '',
       emailServiceUrl: '',
       userId: 'user-1',
       syncStateId: 'ss-1',
@@ -497,7 +497,7 @@ describe('run-classify-pipeline command', () => {
   })
 
   it('passes correct options to runPool', async () => {
-    mockInputs({ 'max-concurrent': '5', 'max-retries': '7' })
+    mockInputs({ 'pipeline-max-concurrent': '5', 'pipeline-max-retries': '7' })
 
     mockRunPool.mockResolvedValue({ processed: 0, failed: 0 })
 
@@ -623,7 +623,7 @@ describe('run-classify-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('claim uses thread-aware SQL with NOT EXISTS for pending/filtering', async () => {
-    mockInputs({ 'classify-batch-size': '10' })
+    mockInputs({ 'pipeline-classify-batch-size': '10' })
 
     mockRunPool.mockImplementation(async (claimFn) => {
       mockExecuteSql
@@ -939,16 +939,16 @@ describe('run-classify-pipeline command', () => {
 
   it('uses default values when inputs are not specified', async () => {
     mockInputs({
-      'primary-model': '',
-      'fallback-model': '',
+      'ai-primary-model': '',
+      'ai-fallback-model': '',
       'ai-api-url': '',
-      'max-concurrent': '',
-      'classify-batch-size': '',
-      'max-retries': '',
-      'chunk-size': '',
-      'fetch-timeout-ms': '',
-      'flush-interval-ms': '',
-      'flush-threshold': '',
+      'pipeline-max-concurrent': '',
+      'pipeline-classify-batch-size': '',
+      'pipeline-max-retries': '',
+      'pipeline-fetch-chunk-size': '',
+      'pipeline-fetch-timeout-ms': '',
+      'pipeline-flush-interval-ms': '',
+      'pipeline-flush-threshold': '',
     })
 
     mockRunPool.mockResolvedValue({ processed: 0, failed: 0 })
@@ -975,7 +975,7 @@ describe('run-classify-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('rejects invalid schema', async () => {
-    mockInputs({ schema: 'schema; DROP TABLE' })
+    mockInputs({ 'sxt-schema': 'schema; DROP TABLE' })
     await expect(runClassifyPipeline()).rejects.toThrow('Invalid schema')
   })
 
@@ -1584,7 +1584,7 @@ describe('run-classify-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('mega-claim: claims claimSize threads and splits into sub-batches', async () => {
-    mockInputs({ 'claim-size': '10', 'classify-batch-size': '3' })
+    mockInputs({ 'pipeline-claim-size': '10', 'pipeline-classify-batch-size': '3' })
 
     // 7 rows across 7 threads → should split into 3 sub-batches (3+3+1)
     const rows = Array.from({ length: 7 }, (_, i) => ({
@@ -1649,8 +1649,8 @@ describe('run-classify-pipeline command', () => {
   // Mega-claim: backward compatibility when claimSize <= classifyBatchSize
   // ----------------------------------------------------------
 
-  it('mega-claim: backward compatible when claim-size not set (defaults to single batch)', async () => {
-    mockInputs() // claim-size defaults to 5, classify-batch-size defaults to 5
+  it('mega-claim: backward compatible when pipeline-claim-size not set (defaults to single batch)', async () => {
+    mockInputs() // pipeline-claim-size defaults to 5, pipeline-classify-batch-size defaults to 5
 
     const rows = makeBatchRows(2)
 
@@ -1691,7 +1691,7 @@ describe('run-classify-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('mega-claim: re-splits stuck mega batch into sub-batches', async () => {
-    mockInputs({ 'claim-size': '10', 'classify-batch-size': '2' })
+    mockInputs({ 'pipeline-claim-size': '10', 'pipeline-classify-batch-size': '2' })
 
     // 4 rows across 4 threads for the stuck mega batch
     const stuckRows = Array.from({ length: 4 }, (_, i) => ({
@@ -1737,7 +1737,7 @@ describe('run-classify-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('mega-claim: stuck non-mega batch uses standard recovery', async () => {
-    mockInputs({ 'claim-size': '10', 'classify-batch-size': '5' })
+    mockInputs({ 'pipeline-claim-size': '10', 'pipeline-classify-batch-size': '5' })
 
     const stuckRows = makeBatchRows(2)
 
@@ -1779,7 +1779,7 @@ describe('run-classify-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('mega-claim: groups multi-row threads correctly in sub-batches', async () => {
-    mockInputs({ 'claim-size': '10', 'classify-batch-size': '2' })
+    mockInputs({ 'pipeline-claim-size': '10', 'pipeline-classify-batch-size': '2' })
 
     // 6 rows across 3 threads (2 rows per thread) → 2 sub-batches (2 threads + 1 thread)
     const rows = [

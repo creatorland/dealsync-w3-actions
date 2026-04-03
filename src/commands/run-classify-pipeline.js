@@ -23,27 +23,27 @@ import {
  * contact inserts, and terminal state updates.
  */
 export async function runClassifyPipeline() {
-  const authUrl = core.getInput('auth-url')
-  const authSecret = core.getInput('auth-secret')
-  const apiUrl = core.getInput('api-url')
-  const biscuit = core.getInput('biscuit')
-  const schema = sanitizeSchema(core.getInput('schema'))
+  const authUrl = core.getInput('sxt-auth-url')
+  const authSecret = core.getInput('sxt-auth-secret')
+  const apiUrl = core.getInput('sxt-api-url')
+  const biscuit = core.getInput('sxt-biscuit')
+  const schema = sanitizeSchema(core.getInput('sxt-schema'))
   const coreSchema = sanitizeSchema(core.getInput('email-core-schema') || 'EMAIL_CORE_STAGING')
-  const contentFetcherUrl = core.getInput('content-fetcher-url')
-  const emailProvider = core.getInput('email-provider') || 'content-fetcher'
+  const contentFetcherUrl = core.getInput('email-content-fetcher-url')
+  const emailProvider = core.getInput('email-provider') || ''
   const emailServiceUrl = core.getInput('email-service-url')
-  const hyperbolicKey = core.getInput('hyperbolic-key')
-  const primaryModel = core.getInput('primary-model') || 'Qwen/Qwen3-235B-A22B-Instruct-2507'
-  const fallbackModel = core.getInput('fallback-model') || 'deepseek-ai/DeepSeek-V3'
-  const aiApiUrl = core.getInput('ai-api-url') || 'https://api.hyperbolic.xyz/v1/chat/completions'
-  const maxConcurrent = parseInt(core.getInput('max-concurrent') || '70', 10)
-  const classifyBatchSize = parseInt(core.getInput('classify-batch-size') || '5', 10)
-  const claimSize = parseInt(core.getInput('claim-size') || '5', 10)
-  const maxRetries = parseInt(core.getInput('max-retries') || '6', 10)
-  const fetchChunkSize = parseInt(core.getInput('fetch-chunk-size') || core.getInput('chunk-size') || '10', 10)
-  const fetchTimeoutMs = parseInt(core.getInput('fetch-timeout-ms') || '120000', 10)
-  const flushIntervalMs = parseInt(core.getInput('flush-interval-ms') || '5000', 10)
-  const flushThreshold = parseInt(core.getInput('flush-threshold') || '5', 10)
+  const hyperbolicKey = core.getInput('ai-api-key')
+  const primaryModel = core.getInput('ai-primary-model') || ''
+  const fallbackModel = core.getInput('ai-fallback-model') || ''
+  const aiApiUrl = core.getInput('ai-api-url') || ''
+  const maxConcurrent = parseInt(core.getInput('pipeline-max-concurrent') || '70', 10)
+  const classifyBatchSize = parseInt(core.getInput('pipeline-classify-batch-size') || '5', 10)
+  const claimSize = parseInt(core.getInput('pipeline-claim-size') || '5', 10)
+  const maxRetries = parseInt(core.getInput('pipeline-max-retries') || '6', 10)
+  const fetchChunkSize = parseInt(core.getInput('pipeline-fetch-chunk-size') || '10', 10)
+  const fetchTimeoutMs = parseInt(core.getInput('pipeline-fetch-timeout-ms') || '120000', 10)
+  const flushIntervalMs = parseInt(core.getInput('pipeline-flush-interval-ms') || '5000', 10)
+  const flushThreshold = parseInt(core.getInput('pipeline-flush-threshold') || '5', 10)
 
   console.log(
     `[run-classify-pipeline] starting (maxConcurrent=${maxConcurrent}, batchSize=${classifyBatchSize}, claimSize=${claimSize}, maxRetries=${maxRetries}, fetchChunkSize=${fetchChunkSize}, fetchTimeoutMs=${fetchTimeoutMs})`,

@@ -4,25 +4,6 @@ on:
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
-    inputs:
-      max_concurrent:
-        type: string
-        default: '70'
-      classify_batch_size:
-        type: string
-        default: '5'
-      max_retries:
-        type: string
-        default: '6'
-      chunk_size:
-        type: string
-        default: '10'
-      fetch_timeout_ms:
-        type: string
-        default: '240000'
-      email_provider:
-        type: string
-        default: 'content-fetcher'
 
 concurrency:
   group: compact-classify-betanet
@@ -40,22 +21,26 @@ jobs:
         uses: creatorland/dealsync-action@main
         with:
           command: run-classify-pipeline
-          max-concurrent: ${{ inputs.max_concurrent }}
-          classify-batch-size: ${{ inputs.classify_batch_size }}
-          max-retries: ${{ inputs.max_retries }}
-          chunk-size: ${{ inputs.chunk_size }}
-          fetch-timeout-ms: ${{ inputs.fetch_timeout_ms }}
-          auth-url: ${{ secrets.SXT_AUTH_URL }}
-          auth-secret: ${{ secrets.SXT_AUTH_SECRET }}
-          api-url: ${{ secrets.SXT_API_URL }}
-          biscuit: ${{ secrets.SXT_BISCUIT }}
-          schema: ${{ secrets.SXT_SCHEMA }}
-          rate-limiter-url: ${{ secrets.SXT_RATE_LIMITER_URL }}
-          rate-limiter-api-key: ${{ secrets.SXT_RATE_LIMITER_API_KEY }}
-          content-fetcher-url: ${{ secrets.CONTENT_FETCHER_URL }}
-          email-provider: ${{ secrets.EMAIL_PROVIDER || inputs.email_provider }}
+          sxt-auth-url: ${{ secrets.SXT_AUTH_URL }}
+          sxt-auth-secret: ${{ secrets.SXT_AUTH_SECRET }}
+          sxt-api-url: ${{ secrets.SXT_API_URL }}
+          sxt-biscuit: ${{ secrets.SXT_BISCUIT }}
+          sxt-schema: ${{ secrets.SXT_SCHEMA }}
+          sxt-rate-limiter-url: ${{ secrets.SXT_RATE_LIMITER_URL }}
+          sxt-rate-limiter-api-key: ${{ secrets.SXT_RATE_LIMITER_API_KEY }}
+          email-provider: ${{ secrets.EMAIL_PROVIDER }}
+          email-core-schema: ${{ secrets.EMAIL_CORE_SCHEMA }}
+          email-content-fetcher-url: ${{ secrets.EMAIL_CONTENT_FETCHER_URL }}
           email-service-url: ${{ secrets.EMAIL_SERVICE_URL }}
-          email-core-schema: EMAIL_CORE_PROD
-          hyperbolic-key: ${{ secrets.HYPERBOLIC_KEY }}
-          primary-model: ${{ secrets.AI_PRIMARY_MODEL }}
-          fallback-model: ${{ secrets.AI_FALLBACK_MODEL }}
+          ai-api-key: ${{ secrets.AI_API_KEY }}
+          ai-primary-model: ${{ secrets.AI_PRIMARY_MODEL }}
+          ai-fallback-model: ${{ secrets.AI_FALLBACK_MODEL }}
+          ai-api-url: ${{ secrets.AI_API_URL }}
+          pipeline-max-concurrent: ${{ secrets.PIPELINE_MAX_CONCURRENT }}
+          pipeline-claim-size: ${{ secrets.PIPELINE_CLAIM_SIZE }}
+          pipeline-classify-batch-size: ${{ secrets.PIPELINE_CLASSIFY_BATCH_SIZE }}
+          pipeline-max-retries: ${{ secrets.PIPELINE_MAX_RETRIES }}
+          pipeline-fetch-chunk-size: ${{ secrets.PIPELINE_FETCH_CHUNK_SIZE }}
+          pipeline-fetch-timeout-ms: ${{ secrets.PIPELINE_FETCH_TIMEOUT_MS }}
+          pipeline-flush-interval-ms: ${{ secrets.PIPELINE_FLUSH_INTERVAL_MS }}
+          pipeline-flush-threshold: ${{ secrets.PIPELINE_FLUSH_THRESHOLD }}

@@ -6,51 +6,42 @@ inputs:
   command:
     description: 'Operation: run-filter-pipeline, run-classify-pipeline, sync-deal-states, eval, eval-compare'
     required: true
-  auth-url:
+  sxt-auth-url:
     description: 'SxT auth proxy URL'
-  auth-secret:
+  sxt-auth-secret:
     description: 'SxT auth shared secret'
-  api-url:
+  sxt-api-url:
     description: 'SxT API base URL'
-  biscuit:
+  sxt-biscuit:
     description: 'Pre-generated SxT biscuit'
-  schema:
+  sxt-schema:
     description: 'SxT schema name (dealsync)'
   email-core-schema:
     description: 'SxT schema name (email core)'
-    default: 'EMAIL_CORE_STAGING'
-  rate-limiter-url:
+  sxt-rate-limiter-url:
     description: 'SxT rate limiter service URL (optional, fail-open if not set)'
-  rate-limiter-api-key:
+  sxt-rate-limiter-api-key:
     description: 'SxT API key for rate limiter token acquisition'
-  content-fetcher-url:
+  email-content-fetcher-url:
     description: 'Content fetcher service URL (run-filter-pipeline, run-classify-pipeline)'
   email-provider:
-    description: 'Email data provider: content-fetcher (default) or email-service'
-    default: 'content-fetcher'
+    description: 'Email data provider: content-fetcher or email-service'
   email-service-url:
     description: 'Email service URL (only used when email-provider=email-service)'
-    default: 'https://email-service-production-77d4.up.railway.app'
   batch-id:
     description: 'Batch ID for processor commands (run-filter-pipeline, run-classify-pipeline)'
-  hyperbolic-key:
-    description: 'Hyperbolic API key for AI classification (run-classify-pipeline)'
-  primary-model:
+  ai-api-key:
+    description: 'AI API key for classification (run-classify-pipeline)'
+  ai-primary-model:
     description: 'Primary AI model ID (run-classify-pipeline)'
-    default: 'Qwen/Qwen3-235B-A22B-Instruct-2507'
-  fallback-model:
+  ai-fallback-model:
     description: 'Fallback AI model ID (run-classify-pipeline)'
-    default: 'deepseek-ai/DeepSeek-V3'
   ai-api-url:
     description: 'AI API URL (run-classify-pipeline)'
-    default: 'https://api.hyperbolic.xyz/v1/chat/completions'
-  fetch-chunk-size:
+  pipeline-fetch-chunk-size:
     description: 'Emails per content-fetcher HTTP request (run-filter-pipeline, run-classify-pipeline)'
     default: '10'
-  chunk-size:
-    description: 'Deprecated: use fetch-chunk-size instead'
-    default: '10'
-  fetch-timeout-ms:
+  pipeline-fetch-timeout-ms:
     description: 'Content fetcher request timeout in ms'
     default: '120000'
   offset:
@@ -77,25 +68,25 @@ inputs:
     description: 'JSON result from eval variant A (eval-compare)'
   result-b:
     description: 'JSON result from eval variant B (eval-compare)'
-  max-concurrent:
+  pipeline-max-concurrent:
     description: 'Max parallel batch workers (run-filter-pipeline, run-classify-pipeline)'
     default: '70'
-  filter-batch-size:
+  pipeline-filter-batch-size:
     description: 'Items per filter batch (run-filter-pipeline)'
     default: '200'
-  classify-batch-size:
+  pipeline-classify-batch-size:
     description: 'Threads per AI prompt (run-classify-pipeline)'
     default: '5'
-  claim-size:
+  pipeline-claim-size:
     description: 'Threads per mega-claim (run-classify-pipeline). Higher = fewer SxT round-trips. Each mega-claim is split into sub-batches of classify-batch-size for AI.'
     default: '5'
-  max-retries:
+  pipeline-max-retries:
     description: 'Max attempts per batch before dead letter (run-filter-pipeline, run-classify-pipeline)'
     default: '6'
-  flush-interval-ms:
+  pipeline-flush-interval-ms:
     description: 'Write batcher flush interval in ms (run-classify-pipeline)'
     default: '5000'
-  flush-threshold:
+  pipeline-flush-threshold:
     description: 'Write batcher flush threshold per queue (run-classify-pipeline)'
     default: '5'
 

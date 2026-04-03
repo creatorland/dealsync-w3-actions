@@ -71,8 +71,8 @@ export async function authenticate(authUrl, authSecret, badToken) {
  * @param {number} tokens — number of tokens to acquire (default 1)
  */
 export async function acquireRateLimitToken(tokens = 1) {
-  const rateLimiterUrl = core.getInput('rate-limiter-url')
-  const apiKey = core.getInput('rate-limiter-api-key')
+  const rateLimiterUrl = core.getInput('sxt-rate-limiter-url')
+  const apiKey = core.getInput('sxt-rate-limiter-api-key')
 
   if (!rateLimiterUrl || !apiKey) return
 
@@ -143,8 +143,8 @@ async function reauthenticate(badToken) {
   // Another worker is already re-authing — wait for it
   if (reauthPromise) return reauthPromise
 
-  const authUrl = core.getInput('auth-url')
-  const authSecret = core.getInput('auth-secret')
+  const authUrl = core.getInput('sxt-auth-url')
+  const authSecret = core.getInput('sxt-auth-secret')
   reauthPromise = authenticate(authUrl, authSecret, badToken).finally(() => {
     reauthPromise = null
   })

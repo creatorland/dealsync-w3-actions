@@ -27446,8 +27446,8 @@ async function authenticate(authUrl, authSecret, badToken) {
  * @param {number} tokens — number of tokens to acquire (default 1)
  */
 async function acquireRateLimitToken(tokens = 1) {
-  const rateLimiterUrl = coreExports.getInput('rate-limiter-url');
-  const apiKey = coreExports.getInput('rate-limiter-api-key');
+  const rateLimiterUrl = coreExports.getInput('sxt-rate-limiter-url');
+  const apiKey = coreExports.getInput('sxt-rate-limiter-api-key');
 
   if (!rateLimiterUrl || !apiKey) return
 
@@ -27518,8 +27518,8 @@ async function reauthenticate(badToken) {
   // Another worker is already re-authing — wait for it
   if (reauthPromise) return reauthPromise
 
-  const authUrl = coreExports.getInput('auth-url');
-  const authSecret = coreExports.getInput('auth-secret');
+  const authUrl = coreExports.getInput('sxt-auth-url');
+  const authSecret = coreExports.getInput('sxt-auth-secret');
   reauthPromise = authenticate(authUrl, authSecret, badToken).finally(() => {
     reauthPromise = null;
   });
@@ -28069,11 +28069,11 @@ const STUCK_INTERVAL_MINUTES = 5;
  * and are still stuck in an active status.
  */
 async function runSyncDealStates() {
-  const authUrl = coreExports.getInput('auth-url');
-  const authSecret = coreExports.getInput('auth-secret');
-  const apiUrl = coreExports.getInput('api-url');
-  const biscuit = coreExports.getInput('biscuit');
-  const schema = sanitizeSchema(coreExports.getInput('schema'));
+  const authUrl = coreExports.getInput('sxt-auth-url');
+  const authSecret = coreExports.getInput('sxt-auth-secret');
+  const apiUrl = coreExports.getInput('sxt-api-url');
+  const biscuit = coreExports.getInput('sxt-biscuit');
+  const schema = sanitizeSchema(coreExports.getInput('sxt-schema'));
   const emailCoreSchema = sanitizeSchema(coreExports.getInput('email-core-schema') || 'EMAIL_CORE_STAGING');
 
   console.log(
@@ -38061,8 +38061,8 @@ async function fetchPromptsByHash(hash) {
 }
 
 async function runEval() {
-  const hyperbolicKey = coreExports.getInput('hyperbolic-key');
-  const model = coreExports.getInput('primary-model') || 'Qwen/Qwen3-235B-A22B-Instruct-2507';
+  const hyperbolicKey = coreExports.getInput('ai-api-key');
+  const model = coreExports.getInput('ai-primary-model') || 'Qwen/Qwen3-235B-A22B-Instruct-2507';
   const aiApiUrl = coreExports.getInput('ai-api-url') || 'https://api.hyperbolic.xyz/v1/chat/completions';
   const numRuns = parseInt(coreExports.getInput('runs') || '10', 10);
   const temperature = parseFloat(coreExports.getInput('temperature') || '0');
@@ -38070,7 +38070,7 @@ async function runEval() {
   const concurrency = parseInt(coreExports.getInput('concurrency') || '10', 10);
   const promptHash = coreExports.getInput('prompt-hash') || '';
 
-  if (!hyperbolicKey) throw new Error('hyperbolic-key is required for eval')
+  if (!hyperbolicKey) throw new Error('ai-api-key is required for eval')
 
   // Fetch prompts from a specific commit hash, or use bundled defaults
   let promptOverrides = {};
@@ -38443,20 +38443,20 @@ async function runEvalCompare() {
  * through a concurrent pool.
  */
 async function runFilterPipeline() {
-  const authUrl = coreExports.getInput('auth-url');
-  const authSecret = coreExports.getInput('auth-secret');
-  const apiUrl = coreExports.getInput('api-url');
-  const biscuit = coreExports.getInput('biscuit');
-  const schema = sanitizeSchema(coreExports.getInput('schema'));
-  const contentFetcherUrl = coreExports.getInput('content-fetcher-url');
-  const emailProvider = coreExports.getInput('email-provider') || 'content-fetcher';
+  const authUrl = coreExports.getInput('sxt-auth-url');
+  const authSecret = coreExports.getInput('sxt-auth-secret');
+  const apiUrl = coreExports.getInput('sxt-api-url');
+  const biscuit = coreExports.getInput('sxt-biscuit');
+  const schema = sanitizeSchema(coreExports.getInput('sxt-schema'));
+  const contentFetcherUrl = coreExports.getInput('email-content-fetcher-url');
+  const emailProvider = coreExports.getInput('email-provider') || '';
   const emailServiceUrl = coreExports.getInput('email-service-url');
-  const maxConcurrent = parseInt(coreExports.getInput('max-concurrent') || '70', 10);
-  const batchSize = parseInt(coreExports.getInput('filter-batch-size') || '200', 10);
-  const maxRetries = parseInt(coreExports.getInput('max-retries') || '6', 10);
-  const fetchChunkSize = parseInt(coreExports.getInput('fetch-chunk-size') || coreExports.getInput('chunk-size') || '10', 10);
-  const fetchTimeoutMs = parseInt(coreExports.getInput('fetch-timeout-ms') || '30000', 10);
-  const claimSize = parseInt(coreExports.getInput('claim-size') || '200', 10);
+  const maxConcurrent = parseInt(coreExports.getInput('pipeline-max-concurrent') || '70', 10);
+  const batchSize = parseInt(coreExports.getInput('pipeline-filter-batch-size') || '200', 10);
+  const maxRetries = parseInt(coreExports.getInput('pipeline-max-retries') || '6', 10);
+  const fetchChunkSize = parseInt(coreExports.getInput('pipeline-fetch-chunk-size') || '10', 10);
+  const fetchTimeoutMs = parseInt(coreExports.getInput('pipeline-fetch-timeout-ms') || '30000', 10);
+  const claimSize = parseInt(coreExports.getInput('pipeline-claim-size') || '200', 10);
 
   console.log(
     `[run-filter-pipeline] starting (maxConcurrent=${maxConcurrent}, batchSize=${batchSize}, claimSize=${claimSize}, maxRetries=${maxRetries}, fetchChunkSize=${fetchChunkSize}, fetchTimeoutMs=${fetchTimeoutMs})`,
@@ -39033,27 +39033,27 @@ class WriteBatcher {
  * contact inserts, and terminal state updates.
  */
 async function runClassifyPipeline() {
-  const authUrl = coreExports.getInput('auth-url');
-  const authSecret = coreExports.getInput('auth-secret');
-  const apiUrl = coreExports.getInput('api-url');
-  const biscuit = coreExports.getInput('biscuit');
-  const schema = sanitizeSchema(coreExports.getInput('schema'));
+  const authUrl = coreExports.getInput('sxt-auth-url');
+  const authSecret = coreExports.getInput('sxt-auth-secret');
+  const apiUrl = coreExports.getInput('sxt-api-url');
+  const biscuit = coreExports.getInput('sxt-biscuit');
+  const schema = sanitizeSchema(coreExports.getInput('sxt-schema'));
   const coreSchema = sanitizeSchema(coreExports.getInput('email-core-schema') || 'EMAIL_CORE_STAGING');
-  const contentFetcherUrl = coreExports.getInput('content-fetcher-url');
-  const emailProvider = coreExports.getInput('email-provider') || 'content-fetcher';
+  const contentFetcherUrl = coreExports.getInput('email-content-fetcher-url');
+  const emailProvider = coreExports.getInput('email-provider') || '';
   const emailServiceUrl = coreExports.getInput('email-service-url');
-  const hyperbolicKey = coreExports.getInput('hyperbolic-key');
-  const primaryModel = coreExports.getInput('primary-model') || 'Qwen/Qwen3-235B-A22B-Instruct-2507';
-  const fallbackModel = coreExports.getInput('fallback-model') || 'deepseek-ai/DeepSeek-V3';
-  const aiApiUrl = coreExports.getInput('ai-api-url') || 'https://api.hyperbolic.xyz/v1/chat/completions';
-  const maxConcurrent = parseInt(coreExports.getInput('max-concurrent') || '70', 10);
-  const classifyBatchSize = parseInt(coreExports.getInput('classify-batch-size') || '5', 10);
-  const claimSize = parseInt(coreExports.getInput('claim-size') || '5', 10);
-  const maxRetries = parseInt(coreExports.getInput('max-retries') || '6', 10);
-  const fetchChunkSize = parseInt(coreExports.getInput('fetch-chunk-size') || coreExports.getInput('chunk-size') || '10', 10);
-  const fetchTimeoutMs = parseInt(coreExports.getInput('fetch-timeout-ms') || '120000', 10);
-  const flushIntervalMs = parseInt(coreExports.getInput('flush-interval-ms') || '5000', 10);
-  const flushThreshold = parseInt(coreExports.getInput('flush-threshold') || '5', 10);
+  const hyperbolicKey = coreExports.getInput('ai-api-key');
+  const primaryModel = coreExports.getInput('ai-primary-model') || '';
+  const fallbackModel = coreExports.getInput('ai-fallback-model') || '';
+  const aiApiUrl = coreExports.getInput('ai-api-url') || '';
+  const maxConcurrent = parseInt(coreExports.getInput('pipeline-max-concurrent') || '70', 10);
+  const classifyBatchSize = parseInt(coreExports.getInput('pipeline-classify-batch-size') || '5', 10);
+  const claimSize = parseInt(coreExports.getInput('pipeline-claim-size') || '5', 10);
+  const maxRetries = parseInt(coreExports.getInput('pipeline-max-retries') || '6', 10);
+  const fetchChunkSize = parseInt(coreExports.getInput('pipeline-fetch-chunk-size') || '10', 10);
+  const fetchTimeoutMs = parseInt(coreExports.getInput('pipeline-fetch-timeout-ms') || '120000', 10);
+  const flushIntervalMs = parseInt(coreExports.getInput('pipeline-flush-interval-ms') || '5000', 10);
+  const flushThreshold = parseInt(coreExports.getInput('pipeline-flush-threshold') || '5', 10);
 
   console.log(
     `[run-classify-pipeline] starting (maxConcurrent=${maxConcurrent}, batchSize=${classifyBatchSize}, claimSize=${claimSize}, maxRetries=${maxRetries}, fetchChunkSize=${fetchChunkSize}, fetchTimeoutMs=${fetchTimeoutMs})`,

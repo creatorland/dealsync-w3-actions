@@ -18,11 +18,11 @@ const STUCK_INTERVAL_MINUTES = 5
  * and are still stuck in an active status.
  */
 export async function runSyncDealStates() {
-  const authUrl = core.getInput('auth-url')
-  const authSecret = core.getInput('auth-secret')
-  const apiUrl = core.getInput('api-url')
-  const biscuit = core.getInput('biscuit')
-  const schema = sanitizeSchema(core.getInput('schema'))
+  const authUrl = core.getInput('sxt-auth-url')
+  const authSecret = core.getInput('sxt-auth-secret')
+  const apiUrl = core.getInput('sxt-api-url')
+  const biscuit = core.getInput('sxt-biscuit')
+  const schema = sanitizeSchema(core.getInput('sxt-schema'))
   const emailCoreSchema = sanitizeSchema(core.getInput('email-core-schema') || 'EMAIL_CORE_STAGING')
 
   console.log(

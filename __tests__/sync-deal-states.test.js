@@ -16,11 +16,11 @@ const { runSyncDealStates } = await import('../src/commands/sync-deal-states.js'
 
 function mockInputs(overrides = {}) {
   const defaults = {
-    'auth-url': 'https://auth.example.com/token',
-    'auth-secret': 'test-secret',
-    'api-url': 'https://sxt.example.com',
-    biscuit: 'test-biscuit',
-    schema: 'dealsync_stg_v1',
+    'sxt-auth-url': 'https://auth.example.com/token',
+    'sxt-auth-secret': 'test-secret',
+    'sxt-api-url': 'https://sxt.example.com',
+    'sxt-biscuit': 'test-biscuit',
+    'sxt-schema': 'dealsync_stg_v1',
     offset: '0',
     limit: '1000',
     ...overrides,
@@ -102,7 +102,7 @@ describe('sync-deal-states command', () => {
   })
 
   it('rejects invalid schema', async () => {
-    mockInputs({ schema: 'schema; DROP TABLE' })
+    mockInputs({ 'sxt-schema': 'schema; DROP TABLE' })
     await expect(runSyncDealStates()).rejects.toThrow('Invalid schema')
   })
 

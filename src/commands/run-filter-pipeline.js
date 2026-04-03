@@ -18,20 +18,20 @@ import {
  * through a concurrent pool.
  */
 export async function runFilterPipeline() {
-  const authUrl = core.getInput('auth-url')
-  const authSecret = core.getInput('auth-secret')
-  const apiUrl = core.getInput('api-url')
-  const biscuit = core.getInput('biscuit')
-  const schema = sanitizeSchema(core.getInput('schema'))
-  const contentFetcherUrl = core.getInput('content-fetcher-url')
-  const emailProvider = core.getInput('email-provider') || 'content-fetcher'
+  const authUrl = core.getInput('sxt-auth-url')
+  const authSecret = core.getInput('sxt-auth-secret')
+  const apiUrl = core.getInput('sxt-api-url')
+  const biscuit = core.getInput('sxt-biscuit')
+  const schema = sanitizeSchema(core.getInput('sxt-schema'))
+  const contentFetcherUrl = core.getInput('email-content-fetcher-url')
+  const emailProvider = core.getInput('email-provider') || ''
   const emailServiceUrl = core.getInput('email-service-url')
-  const maxConcurrent = parseInt(core.getInput('max-concurrent') || '70', 10)
-  const batchSize = parseInt(core.getInput('filter-batch-size') || '200', 10)
-  const maxRetries = parseInt(core.getInput('max-retries') || '6', 10)
-  const fetchChunkSize = parseInt(core.getInput('fetch-chunk-size') || core.getInput('chunk-size') || '10', 10)
-  const fetchTimeoutMs = parseInt(core.getInput('fetch-timeout-ms') || '30000', 10)
-  const claimSize = parseInt(core.getInput('claim-size') || '200', 10)
+  const maxConcurrent = parseInt(core.getInput('pipeline-max-concurrent') || '70', 10)
+  const batchSize = parseInt(core.getInput('pipeline-filter-batch-size') || '200', 10)
+  const maxRetries = parseInt(core.getInput('pipeline-max-retries') || '6', 10)
+  const fetchChunkSize = parseInt(core.getInput('pipeline-fetch-chunk-size') || '10', 10)
+  const fetchTimeoutMs = parseInt(core.getInput('pipeline-fetch-timeout-ms') || '30000', 10)
+  const claimSize = parseInt(core.getInput('pipeline-claim-size') || '200', 10)
 
   console.log(
     `[run-filter-pipeline] starting (maxConcurrent=${maxConcurrent}, batchSize=${batchSize}, claimSize=${claimSize}, maxRetries=${maxRetries}, fetchChunkSize=${fetchChunkSize}, fetchTimeoutMs=${fetchTimeoutMs})`,

@@ -28,8 +28,8 @@ async function fetchPromptsByHash(hash) {
 }
 
 export async function runEval() {
-  const hyperbolicKey = core.getInput('hyperbolic-key')
-  const model = core.getInput('primary-model') || 'Qwen/Qwen3-235B-A22B-Instruct-2507'
+  const hyperbolicKey = core.getInput('ai-api-key')
+  const model = core.getInput('ai-primary-model') || 'Qwen/Qwen3-235B-A22B-Instruct-2507'
   const aiApiUrl = core.getInput('ai-api-url') || 'https://api.hyperbolic.xyz/v1/chat/completions'
   const numRuns = parseInt(core.getInput('runs') || '10', 10)
   const temperature = parseFloat(core.getInput('temperature') || '0')
@@ -37,7 +37,7 @@ export async function runEval() {
   const concurrency = parseInt(core.getInput('concurrency') || '10', 10)
   const promptHash = core.getInput('prompt-hash') || ''
 
-  if (!hyperbolicKey) throw new Error('hyperbolic-key is required for eval')
+  if (!hyperbolicKey) throw new Error('ai-api-key is required for eval')
 
   // Fetch prompts from a specific commit hash, or use bundled defaults
   let promptOverrides = {}

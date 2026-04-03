@@ -67,17 +67,17 @@ const { runFilterPipeline } = await import('../src/commands/run-filter-pipeline.
 
 function mockInputs(overrides = {}) {
   const defaults = {
-    'auth-url': 'https://auth.example.com/token',
-    'auth-secret': 'test-secret',
-    'api-url': 'https://sxt.example.com',
-    biscuit: 'test-biscuit',
-    schema: 'dealsync_stg_v1',
-    'content-fetcher-url': 'https://fetcher.example.com',
-    'max-concurrent': '5',
-    'filter-batch-size': '200',
-    'max-retries': '3',
-    'chunk-size': '50',
-    'fetch-timeout-ms': '30000',
+    'sxt-auth-url': 'https://auth.example.com/token',
+    'sxt-auth-secret': 'test-secret',
+    'sxt-api-url': 'https://sxt.example.com',
+    'sxt-biscuit': 'test-biscuit',
+    'sxt-schema': 'dealsync_stg_v1',
+    'email-content-fetcher-url': 'https://fetcher.example.com',
+    'pipeline-max-concurrent': '5',
+    'pipeline-filter-batch-size': '200',
+    'pipeline-max-retries': '3',
+    'pipeline-fetch-chunk-size': '50',
+    'pipeline-fetch-timeout-ms': '30000',
     ...overrides,
   }
   core.getInput.mockImplementation((name) => defaults[name] ?? '')
@@ -179,7 +179,7 @@ describe('run-filter-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('calls fetchEmails with correct params including format metadata', async () => {
-    mockInputs({ 'chunk-size': '25', 'fetch-timeout-ms': '15000' })
+    mockInputs({ 'pipeline-fetch-chunk-size': '25', 'pipeline-fetch-timeout-ms': '15000' })
 
     const rows = makeBatchRows(2)
 
@@ -216,7 +216,7 @@ describe('run-filter-pipeline command', () => {
     expect(metaMap.get('msg-1')).toEqual(rows[0])
     expect(opts).toEqual({
       contentFetcherUrl: 'https://fetcher.example.com',
-      emailProvider: 'content-fetcher',
+      emailProvider: '',
       emailServiceUrl: '',
       userId: 'user-1',
       syncStateId: 'ss-1',
@@ -501,7 +501,7 @@ describe('run-filter-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('passes correct options to runPool', async () => {
-    mockInputs({ 'max-concurrent': '3', 'max-retries': '5' })
+    mockInputs({ 'pipeline-max-concurrent': '3', 'pipeline-max-retries': '5' })
 
     mockRunPool.mockResolvedValue({ processed: 0, failed: 0 })
 
@@ -547,11 +547,11 @@ describe('run-filter-pipeline command', () => {
 
   it('uses default values when inputs are not specified', async () => {
     mockInputs({
-      'max-concurrent': '',
-      'filter-batch-size': '',
-      'max-retries': '',
-      'chunk-size': '',
-      'fetch-timeout-ms': '',
+      'pipeline-max-concurrent': '',
+      'pipeline-filter-batch-size': '',
+      'pipeline-max-retries': '',
+      'pipeline-fetch-chunk-size': '',
+      'pipeline-fetch-timeout-ms': '',
     })
 
     mockRunPool.mockResolvedValue({ processed: 0, failed: 0 })
@@ -571,7 +571,7 @@ describe('run-filter-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('rejects invalid schema', async () => {
-    mockInputs({ schema: 'schema; DROP TABLE' })
+    mockInputs({ 'sxt-schema': 'schema; DROP TABLE' })
     await expect(runFilterPipeline()).rejects.toThrow('Invalid schema')
   })
 
@@ -580,7 +580,7 @@ describe('run-filter-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('claim uses correct SQL for pending rows', async () => {
-    mockInputs({ 'filter-batch-size': '100', 'claim-size': '100' })
+    mockInputs({ 'pipeline-filter-batch-size': '100', 'pipeline-claim-size': '100' })
 
     mockRunPool.mockImplementation(async (claimFn) => {
       mockExecuteSql
@@ -801,7 +801,7 @@ describe('run-filter-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('mega-claim splits into sub-batches when claimSize > batchSize', async () => {
-    mockInputs({ 'filter-batch-size': '2', 'claim-size': '6' })
+    mockInputs({ 'pipeline-filter-batch-size': '2', 'pipeline-claim-size': '6' })
 
     // 5 rows total → should produce 3 sub-batches (2, 2, 1)
     const rows = makeBatchRows(5)
@@ -855,7 +855,7 @@ describe('run-filter-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('returns single batch object when claimSize <= batchSize', async () => {
-    mockInputs({ 'filter-batch-size': '200', 'claim-size': '200' })
+    mockInputs({ 'pipeline-filter-batch-size': '200', 'pipeline-claim-size': '200' })
 
     const rows = makeBatchRows(3)
 
@@ -889,7 +889,7 @@ describe('run-filter-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('re-splits stuck mega batch on recovery', async () => {
-    mockInputs({ 'filter-batch-size': '2', 'claim-size': '6' })
+    mockInputs({ 'pipeline-filter-batch-size': '2', 'pipeline-claim-size': '6' })
 
     const stuckRows = makeBatchRows(4)
 
@@ -923,7 +923,7 @@ describe('run-filter-pipeline command', () => {
   // ----------------------------------------------------------
 
   it('mega-claim returns null when no pending rows and no stuck batches', async () => {
-    mockInputs({ 'filter-batch-size': '2', 'claim-size': '6' })
+    mockInputs({ 'pipeline-filter-batch-size': '2', 'pipeline-claim-size': '6' })
 
     mockRunPool.mockImplementation(async (claimFn) => {
       mockExecuteSql

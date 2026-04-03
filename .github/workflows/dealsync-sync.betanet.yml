@@ -21,11 +21,11 @@ jobs:
         uses: creatorland/dealsync-action@main
         with:
           command: sync-deal-states
-          auth-url: ${{ secrets.SXT_AUTH_URL }}
-          auth-secret: ${{ secrets.SXT_AUTH_SECRET }}
-          api-url: ${{ secrets.SXT_API_URL }}
-          biscuit: ${{ secrets.SXT_BISCUIT }}
-          schema: ${{ secrets.SXT_SCHEMA }}
-          rate-limiter-url: ${{ secrets.SXT_RATE_LIMITER_URL }}
-          rate-limiter-api-key: ${{ secrets.SXT_RATE_LIMITER_API_KEY }}
-          email-core-schema: EMAIL_CORE_PROD
+          sxt-auth-url: ${{ secrets.SXT_AUTH_URL }}
+          sxt-auth-secret: ${{ secrets.SXT_AUTH_SECRET }}
+          sxt-api-url: ${{ secrets.SXT_API_URL }}
+          sxt-biscuit: ${{ secrets.SXT_BISCUIT }}
+          sxt-schema: ${{ secrets.SXT_SCHEMA }}
+          sxt-rate-limiter-url: ${{ secrets.SXT_RATE_LIMITER_URL }}
+          sxt-rate-limiter-api-key: ${{ secrets.SXT_RATE_LIMITER_API_KEY }}
+          email-core-schema: ${{ secrets.EMAIL_CORE_SCHEMA }}

@@ -62,8 +62,8 @@ jobs:
         uses: creatorland/dealsync-action@main
         with:
           command: eval
-          hyperbolic-key: ${{ secrets.HYPERBOLIC_KEY }}
-          primary-model: ${{ inputs.model_a }}
+          ai-api-key: ${{ secrets.AI_API_KEY }}
+          ai-primary-model: ${{ inputs.model_a }}
           prompt-hash: ${{ inputs.hash_a }}
           runs: ${{ inputs.runs }}
           temperature: ${{ inputs.temperature }}
@@ -78,8 +78,8 @@ jobs:
         uses: creatorland/dealsync-action@main
         with:
           command: eval
-          hyperbolic-key: ${{ secrets.HYPERBOLIC_KEY }}
-          primary-model: ${{ inputs.model_b }}
+          ai-api-key: ${{ secrets.AI_API_KEY }}
+          ai-primary-model: ${{ inputs.model_b }}
           prompt-hash: ${{ inputs.hash_b }}
           runs: ${{ inputs.runs }}
           temperature: ${{ inputs.temperature }}
