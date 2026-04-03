@@ -6,13 +6,16 @@ on:
       max_concurrent:
         type: string
         default: '70'
+      claim_size:
+        type: string
+        default: '30'
       classify_batch_size:
         type: string
         default: '5'
       max_retries:
         type: string
         default: '6'
-      chunk_size:
+      fetch_chunk_size:
         type: string
         default: '10'
       fetch_timeout_ms:
@@ -34,13 +37,15 @@ jobs:
     steps:
       - id: classify
         name: Run classify pipeline
+        timeout-minutes: 60
         uses: creatorland/dealsync-action@main
         with:
           command: run-classify-pipeline
           max-concurrent: ${{ inputs.max_concurrent }}
+          claim-size: ${{ inputs.claim_size }}
           classify-batch-size: ${{ inputs.classify_batch_size }}
           max-retries: ${{ inputs.max_retries }}
-          chunk-size: ${{ inputs.chunk_size }}
+          fetch-chunk-size: ${{ inputs.fetch_chunk_size }}
           fetch-timeout-ms: ${{ inputs.fetch_timeout_ms }}
           auth-url: ${{ secrets.SXT_AUTH_URL }}
           auth-secret: ${{ secrets.SXT_AUTH_SECRET }}
