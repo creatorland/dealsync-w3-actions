@@ -5,6 +5,7 @@
  * since they form a tight unit operating on email data.
  */
 
+import * as core from '@actions/core'
 import { convert } from 'html-to-text'
 import EmailReplyParser from 'email-reply-parser'
 import { withTimeout } from './db.js'
@@ -169,7 +170,7 @@ export function isRejected(email) {
 // Email content fetcher
 // ---------------------------------------------------------------------------
 
-const DEFAULT_MAX_RETRIES = 3
+const DEFAULT_MAX_RETRIES = parseInt(core.getInput('email-max-retries') || '3', 10)
 
 /**
  * Enrich fetched emails with metadata and collect them into the output array.

@@ -89,6 +89,15 @@ inputs:
   pipeline-flush-threshold:
     description: 'Write batcher flush threshold per queue (run-classify-pipeline)'
     default: '5'
+  sxt-max-retries:
+    description: 'Max HTTP retries for SxT database calls'
+    default: '6'
+  ai-max-retries:
+    description: 'Max HTTP retries for AI model calls'
+    default: '3'
+  email-max-retries:
+    description: 'Max HTTP retries for email service calls'
+    default: '3'
 
 outputs:
   success:

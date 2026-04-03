@@ -1,3 +1,4 @@
+import * as core from '@actions/core'
 import { getHeader, sanitizeEmailBody } from './emails.js'
 import { sleep, backoffMs } from './retry.js'
 import systemTemplate from '../../prompts/system.md'
@@ -79,7 +80,7 @@ export function buildPrompt(emails, { systemOverride, userOverride, creatorEmail
 // --- Constants ---
 export const AI_REQUEST_TIMEOUT_MS = 240000
 export const AI_RETRY_DELAY_MS = 2000
-export const MAX_HTTP_RETRIES = 3
+export const MAX_HTTP_RETRIES = parseInt(core.getInput('ai-max-retries') || '3', 10)
 export const MAX_TOKENS = 20480
 
 // --- Valid categories and deal types for validation ---

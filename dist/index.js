@@ -27393,7 +27393,7 @@ function backoffMs(attempt, { base = 2000, max = 10000, jitter = false } = {}) {
 
 const SQL_TIMEOUT_MS = 120000;
 const AUTH_TIMEOUT_MS = 30000;
-const MAX_RETRIES = 6;
+const MAX_RETRIES = parseInt(coreExports.getInput('sxt-max-retries') || '6', 10);
 
 let cachedJwt = null;
 let reauthPromise = null;
@@ -34935,7 +34935,7 @@ function isRejected(email) {
 // Email content fetcher
 // ---------------------------------------------------------------------------
 
-const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_MAX_RETRIES = parseInt(coreExports.getInput('email-max-retries') || '3', 10);
 
 /**
  * Enrich fetched emails with metadata and collect them into the output array.
@@ -35338,7 +35338,7 @@ function buildPrompt(emails, { systemOverride, userOverride, creatorEmail } = {}
 // --- Constants ---
 const AI_REQUEST_TIMEOUT_MS = 240000;
 const AI_RETRY_DELAY_MS = 2000;
-const MAX_HTTP_RETRIES = 3;
+const MAX_HTTP_RETRIES = parseInt(coreExports.getInput('ai-max-retries') || '3', 10);
 const MAX_TOKENS = 20480;
 
 // --- Valid categories and deal types for validation ---

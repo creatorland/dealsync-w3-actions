@@ -42,3 +42,6 @@ jobs:
           pipeline-fetch-timeout-ms: ${{ secrets.PIPELINE_FETCH_TIMEOUT_MS }}
           pipeline-flush-interval-ms: ${{ secrets.PIPELINE_FLUSH_INTERVAL_MS }}
           pipeline-flush-threshold: ${{ secrets.PIPELINE_FLUSH_THRESHOLD }}
+          sxt-max-retries: ${{ secrets.SXT_MAX_RETRIES }}
+          ai-max-retries: ${{ secrets.AI_MAX_RETRIES }}
+          email-max-retries: ${{ secrets.EMAIL_MAX_RETRIES }}
