@@ -89,7 +89,7 @@ export const dealStates = {
   findDeadBatches: (schema, status, intervalMinutes, maxRetries) => {
     const s = sanitizeSchema(schema)
     const st = sanitizeString(status)
-    return `SELECT ds.BATCH_ID FROM ${s}.DEAL_STATES ds LEFT JOIN ${s}.BATCH_EVENTS be ON be.BATCH_ID = ds.BATCH_ID WHERE ds.STATUS = '${st}' AND ds.BATCH_ID IS NOT NULL AND ds.UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${Number(intervalMinutes)}' MINUTE GROUP BY ds.BATCH_ID HAVING COUNT(DISTINCT be.TRIGGER_HASH) >= ${Number(maxRetries)}`
+    return `SELECT ds.BATCH_ID FROM ${s}.DEAL_STATES ds LEFT JOIN ${s}.BATCH_EVENTS be ON be.BATCH_ID = ds.BATCH_ID WHERE ds.STATUS = '${st}' AND ds.BATCH_ID IS NOT NULL AND ds.UPDATED_AT < CURRENT_TIMESTAMP - INTERVAL '${Number(intervalMinutes)}' MINUTE GROUP BY ds.BATCH_ID HAVING COUNT(DISTINCT be.TRIGGER_HASH) >= ${Number(maxRetries)} LIMIT 10000`
   },
 
   countByBatchAndStatus: (schema, batchId, status) => {
