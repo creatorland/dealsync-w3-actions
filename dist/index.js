@@ -39961,7 +39961,9 @@ async function runRecoveryPipeline() {
   const poolResults = await runPool(claimBatch, processRecoveryBatch, {
     maxConcurrent,
     maxRetries,
-    onDeadLetter: async () => {},
+    onDeadLetter: async (batch) => {
+      console.log(`[run-recovery-pipeline] dead-lettered batch ${batch.batch_id} (${batch.count} rows)`);
+    },
   });
 
   const runMs = Date.now() - runStart;
