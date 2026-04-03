@@ -18,7 +18,7 @@ jobs:
       - id: filter
         name: Run filter pipeline
         timeout-minutes: 60
-        uses: creatorland/dealsync-action@59e30ba
+        uses: creatorland/dealsync-action@e4ad709
         with:
           command: run-filter-pipeline
           sxt-auth-url: ${{ secrets.SXT_AUTH_URL }}
