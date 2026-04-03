@@ -1,0 +1,36 @@
+name: ds-recovery-1h
+authority: '0x7504607d40696d6Ad89e72f4D820fD1fBCD1143b'
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  recovery:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    environment: '0x12c3f02f05146db270f75d2abda0557e3250598c1d7029bd221ec3d028bbba53'
+    steps:
+      - id: recovery
+        name: Run recovery pipeline
+        timeout-minutes: 60
+        uses: creatorland/dealsync-action@COMMIT_HASH
+        with:
+          command: run-recovery-pipeline
+          sxt-auth-url: ${{ secrets.SXT_AUTH_URL }}
+          sxt-auth-secret: ${{ secrets.SXT_AUTH_SECRET }}
+          sxt-api-url: ${{ secrets.SXT_API_URL }}
+          sxt-biscuit: ${{ secrets.SXT_BISCUIT }}
+          sxt-schema: ${{ secrets.SXT_SCHEMA }}
+          sxt-rate-limiter-url: ${{ secrets.SXT_RATE_LIMITER_URL }}
+          sxt-rate-limiter-api-key: ${{ secrets.SXT_RATE_LIMITER_API_KEY }}
+          email-provider: ${{ secrets.EMAIL_PROVIDER }}
+          email-content-fetcher-url: ${{ secrets.EMAIL_CONTENT_FETCHER_URL }}
+          email-service-url: ${{ secrets.EMAIL_SERVICE_URL }}
+          pipeline-recovery-max-concurrent: ${{ secrets.PIPELINE_RECOVERY_MAX_CONCURRENT }}
+          recovery-claim-size: ${{ secrets.RECOVERY_CLAIM_SIZE }}
+          pipeline-fetch-chunk-size: ${{ secrets.PIPELINE_FETCH_CHUNK_SIZE }}
+          pipeline-fetch-timeout-ms: ${{ secrets.PIPELINE_FETCH_TIMEOUT_MS }}
+          pipeline-max-retries: ${{ secrets.PIPELINE_MAX_RETRIES }}
+          db-max-retries: ${{ secrets.DB_MAX_RETRIES }}
+          email-max-retries: ${{ secrets.EMAIL_MAX_RETRIES }}
