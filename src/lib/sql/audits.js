@@ -18,4 +18,10 @@ export const audits = {
     const safeEval = sanitizeString(evaluation)
     return `INSERT INTO ${s}.AI_EVALUATION_AUDITS (ID, BATCH_ID, THREAD_COUNT, EMAIL_COUNT, INFERENCE_COST, INPUT_TOKENS, OUTPUT_TOKENS, MODEL_USED, AI_EVALUATION, CREATED_AT) VALUES ('${safeId}', '${safeBid}', ${Number(threadCount)}, ${Number(emailCount)}, ${Number(cost)}, ${Number(inputTokens)}, ${Number(outputTokens)}, '${safeModel}', '${safeEval}', CURRENT_TIMESTAMP)`
   },
+
+  findByThread: (schema, threadId) => {
+    const s = sanitizeSchema(schema)
+    const safeTid = sanitizeId(threadId)
+    return `SELECT A.AI_EVALUATION FROM ${s}.AI_EVALUATION_AUDITS A JOIN ${s}.EMAIL_THREAD_EVALUATIONS E ON E.AI_EVALUATION_AUDIT_ID = A.ID WHERE E.THREAD_ID = '${safeTid}' LIMIT 1`
+  },
 }
