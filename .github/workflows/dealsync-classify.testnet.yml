@@ -1,4 +1,4 @@
-name: ds-classify-5m-testnet
+name: ds-classify-5m-5960123
 authority: '0x553b60381dC74493d03b2865C818350f3347Ac7f'
 on:
   schedule:
@@ -18,7 +18,7 @@ jobs:
       - id: classify
         name: Run classify pipeline
         timeout-minutes: 30
-        uses: creatorland/dealsync-action@main
+        uses: creatorland/dealsync-action@5960123a15664ce395679d360500e8a50f4d42ba
         with:
           command: run-classify-pipeline
           sxt-auth-url: ${{ secrets.SXT_AUTH_URL }}
