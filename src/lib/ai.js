@@ -1,9 +1,14 @@
 import * as core from '@actions/core'
 import { getHeader, sanitizeEmailBody } from './emails.js'
 import { sleep, backoffMs } from './retry.js'
+import { AiThreadArraySchema } from './ai-schema.js'
 import systemTemplate from '../../prompts/system.md'
 import systemTemplateLlama from '../../prompts/system-llama.md'
 import classificationInstructions from '../../prompts/user.md'
+
+// Re-export category/deal-type sets from the schema module so existing
+// consumers importing these from './ai.js' continue to work.
+export { VALID_CATEGORIES, VALID_DEAL_TYPES } from './ai-schema.js'
 
 // --- Prompt building ---
 
@@ -86,26 +91,6 @@ export const AI_REQUEST_TIMEOUT_MS = 240000
 export const AI_RETRY_DELAY_MS = 2000
 export const MAX_HTTP_RETRIES = parseInt(core.getInput('ai-max-retries') || '3', 10)
 export const MAX_TOKENS = 20480
-
-// --- Valid categories and deal types for validation ---
-export const VALID_CATEGORIES = new Set([
-  'new',
-  'in_progress',
-  'completed',
-  'not_interested',
-  'likely_scam',
-  'low_confidence',
-])
-export const VALID_DEAL_TYPES = new Set([
-  'brand_collaboration',
-  'sponsorship',
-  'affiliate',
-  'product_seeding',
-  'ambassador',
-  'content_partnership',
-  'paid_placement',
-  'other_business',
-])
 
 // --- AI client ---
 
@@ -239,29 +224,22 @@ export function parseAndValidate(raw, threadOrder) {
     }
   }
 
-  // Schema validation and coercion
-  return parsed.map((r) => ({
-    thread_id:
-      threadOrder && r.thread_index != null
-        ? threadOrder[Math.max(0, Number(r.thread_index) - 1)] || String(r.thread_id || '')
-        : String(r.thread_id || ''),
-    is_deal: Boolean(r.is_deal),
-    is_english: r.is_english !== false,
-    language: r.language || null,
-    ai_score: Math.min(10, Math.max(1, Math.round(Number(r.ai_score) || 5))),
-    category: r.is_deal ? (VALID_CATEGORIES.has(r.category) ? r.category : 'low_confidence') : null,
-    likely_scam: Boolean(r.likely_scam) || r.category === 'likely_scam',
-    ai_insight: String(r.ai_insight || ''),
-    ai_summary: String(r.ai_summary || '').slice(0, 1000),
-    main_contact: r.is_deal ? r.main_contact || null : null,
-    deal_brand: r.is_deal ? r.deal_brand || null : null,
-    deal_type: r.is_deal
-      ? VALID_DEAL_TYPES.has(r.deal_type)
-        ? r.deal_type
-        : 'other_business'
-      : null,
-    deal_name: r.is_deal ? r.deal_name || null : null,
-    deal_value: r.deal_value != null ? Number(r.deal_value) : null,
-    deal_currency: r.deal_currency || null,
-  }))
+  // Apply thread_id re-mapping using external threadOrder context (schema can't see this).
+  // Preserves pre-refactor behavior: if thread_index is provided, remap; otherwise
+  // keep the existing thread_id (schema will coerce to string downstream).
+  if (threadOrder) {
+    for (const r of parsed) {
+      if (r && r.thread_index != null) {
+        r.thread_id = threadOrder[Math.max(0, Number(r.thread_index) - 1)] || r.thread_id
+      }
+    }
+  }
+
+  // Schema validation and coercion (zod). Throws on failure to preserve the
+  // existing error contract — Layer 2 corrective retry depends on a thrown error.
+  const result = AiThreadArraySchema.safeParse(parsed)
+  if (!result.success) {
+    throw new Error(`AI output schema validation failed: ${result.error.message}`)
+  }
+  return result.data
 }

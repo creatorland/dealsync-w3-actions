@@ -17,7 +17,11 @@ jest.unstable_mockModule('../prompts/user.md', () => ({
     'Classify the email threads below. Return one JSON object per thread in a JSON array.\n\n# Threads to Classify\n\n{{THREAD_DATA}}',
 }))
 
-const { buildPrompt } = await import('../src/lib/ai.js')
+jest.unstable_mockModule('../prompts/system-llama.md', () => ({
+  default: 'You are an email classifier for influencer inboxes (Llama variant). Return JSON only.',
+}))
+
+const { buildPrompt, parseAndValidate } = await import('../src/lib/ai.js')
 
 function makeEmail(overrides = {}) {
   return {
@@ -105,5 +109,61 @@ describe('buildPrompt', () => {
     expect(userPrompt).toContain('[Message 1]')
     expect(userPrompt).toContain('[Message 2]')
     expect(userPrompt).toContain('Message Count: 2')
+  })
+})
+
+describe('parseAndValidate — contract shape', () => {
+  const validRaw = JSON.stringify([
+    {
+      thread_id: 't1',
+      is_deal: true,
+      is_english: true,
+      language: 'en',
+      ai_score: 8,
+      category: 'in_progress',
+      likely_scam: false,
+      ai_insight: 'x',
+      ai_summary: 'y',
+      main_contact: { company: 'Acme' },
+      deal_brand: 'Acme',
+      deal_type: 'brand_collaboration',
+      deal_name: 'Spring Campaign',
+      deal_value: 2500,
+      deal_currency: 'EUR',
+    },
+  ])
+
+  test('preserves all fields consumers read', () => {
+    const result = parseAndValidate(validRaw)
+    expect(result).toHaveLength(1)
+    const t = result[0]
+    expect(t.thread_id).toBe('t1')
+    expect(t.deal_value).toBe(2500)
+    expect(t.deal_currency).toBe('EUR')
+    expect(t.category).toBe('in_progress')
+    expect(t.deal_type).toBe('brand_collaboration')
+    expect(t.is_deal).toBe(true)
+    expect(t.main_contact).toEqual({ company: 'Acme' })
+  })
+
+  test('bad JSON triggers existing error contract (throws)', () => {
+    // Current implementation throws on unparseable input — Layer 2 retry depends on this.
+    expect(() => parseAndValidate('not json')).toThrow()
+  })
+
+  test('coerces string deal_value to number', () => {
+    const raw = JSON.stringify([
+      {
+        thread_id: 't1',
+        is_deal: true,
+        ai_score: 5,
+        category: 'new',
+        deal_type: 'sponsorship',
+        deal_value: '1500',
+        deal_currency: 'USD',
+      },
+    ])
+    const result = parseAndValidate(raw)
+    expect(result[0].deal_value).toBe(1500)
   })
 })
