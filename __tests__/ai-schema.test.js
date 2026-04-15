@@ -1,4 +1,9 @@
-import { AiThreadSchema, AiThreadArraySchema, VALID_CATEGORIES, VALID_DEAL_TYPES } from '../src/lib/ai-schema.js'
+import {
+  AiThreadSchema,
+  AiThreadArraySchema,
+  VALID_CATEGORIES,
+  VALID_DEAL_TYPES,
+} from '../src/lib/ai-schema.js'
 
 const baseDeal = {
   thread_id: 't1',

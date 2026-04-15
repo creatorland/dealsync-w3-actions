@@ -25,13 +25,10 @@ export function threadToDealTuple(thread, { userId }) {
   const dealValue =
     typeof rawValue === 'number' && Number.isFinite(rawValue) && rawValue >= 0 ? rawValue : 0
 
-  const rawCurrency =
-    typeof thread.deal_currency === 'string' ? thread.deal_currency.trim() : ''
+  const rawCurrency = typeof thread.deal_currency === 'string' ? thread.deal_currency.trim() : ''
   const currency = sanitizeString(rawCurrency || 'USD')
 
-  const brand = thread.main_contact
-    ? sanitizeString(thread.main_contact.company || '')
-    : ''
+  const brand = thread.main_contact ? sanitizeString(thread.main_contact.company || '') : ''
 
   return `('${dealId}', '${uid}', '${threadId}', '', '${dealName}', '${dealType}', '${category}', ${dealValue}, '${currency}', '${brand}', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
 }

@@ -59,10 +59,7 @@ describe('threadToDealTuple', () => {
   })
 
   test('apostrophe in deal_name is SQL-escaped', () => {
-    const tuple = threadToDealTuple(
-      { ...baseThread, deal_name: "O'Brien's Deal" },
-      { userId: 'u' }
-    )
+    const tuple = threadToDealTuple({ ...baseThread, deal_name: "O'Brien's Deal" }, { userId: 'u' })
     expect(tuple).toContain("'O''Brien''s Deal'")
   })
 

@@ -39092,8 +39092,7 @@ const AiThreadSchema = objectType({
     is_deal: anyType().transform((v) => Boolean(v)),
     is_english: anyType().transform((v) => v !== false),
     language: anyType().transform((v) => v || null),
-    ai_score: anyType()
-      .transform((v) => Math.min(10, Math.max(1, Math.round(Number(v) || 5)))),
+    ai_score: anyType().transform((v) => Math.min(10, Math.max(1, Math.round(Number(v) || 5)))),
     // Keep the RAW category around so the top-level transform can check
     // `r.category === 'likely_scam'` against the raw value (matching the
     // pre-refactor behavior where likely_scam is computed from raw category).
@@ -42917,13 +42916,10 @@ function threadToDealTuple(thread, { userId }) {
   const dealValue =
     typeof rawValue === 'number' && Number.isFinite(rawValue) && rawValue >= 0 ? rawValue : 0;
 
-  const rawCurrency =
-    typeof thread.deal_currency === 'string' ? thread.deal_currency.trim() : '';
+  const rawCurrency = typeof thread.deal_currency === 'string' ? thread.deal_currency.trim() : '';
   const currency = sanitizeString(rawCurrency || 'USD');
 
-  const brand = thread.main_contact
-    ? sanitizeString(thread.main_contact.company || '')
-    : '';
+  const brand = thread.main_contact ? sanitizeString(thread.main_contact.company || '') : '';
 
   return `('${dealId}', '${uid}', '${threadId}', '', '${dealName}', '${dealType}', '${category}', ${dealValue}, '${currency}', '${brand}', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
 }
@@ -42947,7 +42943,12 @@ async function runClassifyPipeline() {
   const primaryModel = coreExports.getInput('ai-primary-model') || '';
   const fallbackModel = coreExports.getInput('ai-fallback-model') || '';
   const aiApiUrl = coreExports.getInput('ai-api-url') || '';
-  const maxConcurrent = parseInt(coreExports.getInput('pipeline-classify-max-concurrent') || coreExports.getInput('pipeline-max-concurrent') || '70', 10);
+  const maxConcurrent = parseInt(
+    coreExports.getInput('pipeline-classify-max-concurrent') ||
+      coreExports.getInput('pipeline-max-concurrent') ||
+      '70',
+    10,
+  );
   const classifyBatchSize = parseInt(coreExports.getInput('pipeline-classify-batch-size') || '5', 10);
   const claimSize = parseInt(coreExports.getInput('pipeline-claim-size') || '5', 10);
   const maxRetries = parseInt(coreExports.getInput('pipeline-max-retries') || '6', 10);
@@ -43044,7 +43045,9 @@ async function runClassifyPipeline() {
       const rows = await exec(dealStates.selectEmailsWithEvalAndCreator(schema, megaBatchId));
 
       const count = rows ? rows.length : 0;
-      console.log(`[run-classify-pipeline] mega-claimed ${count} pending rows in ${Date.now() - claimStart}ms`);
+      console.log(
+        `[run-classify-pipeline] mega-claimed ${count} pending rows in ${Date.now() - claimStart}ms`,
+      );
 
       if (count > 0) {
         return await megaSplit(megaBatchId, rows, 0)
@@ -43058,7 +43061,9 @@ async function runClassifyPipeline() {
       const rows = await exec(dealStates.selectEmailsWithEvalAndCreator(schema, batchId));
 
       const count = rows ? rows.length : 0;
-      console.log(`[run-classify-pipeline] claimed ${count} pending rows in ${Date.now() - claimStart}ms`);
+      console.log(
+        `[run-classify-pipeline] claimed ${count} pending rows in ${Date.now() - claimStart}ms`,
+      );
 
       if (count > 0) {
         await insertBatchEvent(exec, schema, {
@@ -43095,7 +43100,9 @@ async function runClassifyPipeline() {
     // Check if this is a stuck mega-batch
     if (stuckBatchId.startsWith('mega:')) {
       // SELECT all rows for the mega batch
-      const stuckRows = await exec(dealStates.selectEmailsWithEvalAndCreator(schema, stuckBatchId));
+      const stuckRows = await exec(
+        dealStates.selectEmailsWithEvalAndCreator(schema, stuckBatchId),
+      );
 
       // UPDATE UPDATED_AT to prevent other instances from grabbing it
       await exec(dealStates.refreshBatchTimestamp(schema, stuckBatchId));
@@ -43325,7 +43332,10 @@ async function runClassifyPipeline() {
 
       // b. Build prompt via buildPrompt(emails)
       t0 = Date.now();
-      const { systemPrompt, userPrompt, threadOrder } = buildPrompt(allEmails, { creatorEmail, model: primaryModel });
+      const { systemPrompt, userPrompt, threadOrder } = buildPrompt(allEmails, {
+        creatorEmail,
+        model: primaryModel,
+      });
 
       // c. 4-layer AI resilience pipeline
       const aiOpts = { apiUrl: aiApiUrl, apiKey: hyperbolicKey };
@@ -43345,10 +43355,14 @@ async function runClassifyPipeline() {
         });
         primaryRaw = result.content;
         timings.primaryModel = Date.now() - aiStart;
-        console.log(`[run-classify-pipeline] batch ${batchId}: primary model responded in ${timings.primaryModel}ms`);
+        console.log(
+          `[run-classify-pipeline] batch ${batchId}: primary model responded in ${timings.primaryModel}ms`,
+        );
       } catch (primaryApiError) {
         timings.primaryModel = Date.now() - aiStart;
-        console.log(`[run-classify-pipeline] Primary model API failed after ${timings.primaryModel}ms: ${primaryApiError.message}`);
+        console.log(
+          `[run-classify-pipeline] Primary model API failed after ${timings.primaryModel}ms: ${primaryApiError.message}`,
+        );
         primaryRaw = null;
       }
 
@@ -43404,7 +43418,9 @@ async function runClassifyPipeline() {
           const fallbackRaw = fallbackResult.content;
           threads = parseAndValidate(fallbackRaw, threadOrder);
           timings.fallbackModel = Date.now() - fallbackStart;
-          console.log(`[run-classify-pipeline] Fallback model succeeded in ${timings.fallbackModel}ms: ${threads.length} threads`);
+          console.log(
+            `[run-classify-pipeline] Fallback model succeeded in ${timings.fallbackModel}ms: ${threads.length} threads`,
+          );
         } catch (fallbackError) {
           console.error(
             `[run-classify-pipeline] All layers exhausted. Primary and fallback both failed.`,
@@ -43437,7 +43453,9 @@ async function runClassifyPipeline() {
           }),
         );
         timings.auditSave = Date.now() - t0;
-        console.log(`[run-classify-pipeline] audit saved: ${auditId} (model: ${modelUsed}) in ${timings.auditSave}ms`);
+        console.log(
+          `[run-classify-pipeline] audit saved: ${auditId} (model: ${modelUsed}) in ${timings.auditSave}ms`,
+        );
       } catch (err) {
         if (
           err.message.includes('integrity constraint') ||

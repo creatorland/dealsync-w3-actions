@@ -38,9 +38,7 @@ export const AiThreadSchema = z
     is_deal: z.any().transform((v) => Boolean(v)),
     is_english: z.any().transform((v) => v !== false),
     language: z.any().transform((v) => v || null),
-    ai_score: z
-      .any()
-      .transform((v) => Math.min(10, Math.max(1, Math.round(Number(v) || 5)))),
+    ai_score: z.any().transform((v) => Math.min(10, Math.max(1, Math.round(Number(v) || 5)))),
     // Keep the RAW category around so the top-level transform can check
     // `r.category === 'likely_scam'` against the raw value (matching the
     // pre-refactor behavior where likely_scam is computed from raw category).
