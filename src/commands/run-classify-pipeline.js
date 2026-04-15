@@ -5,6 +5,7 @@ import { callModel, parseAndValidate, buildPrompt } from '../lib/ai.js'
 import { fetchEmails } from '../lib/emails.js'
 import { runPool, insertBatchEvent, sweepStuckRows, sweepOrphanedRows } from '../lib/pipeline.js'
 import { WriteBatcher } from '../lib/batcher.js'
+import { threadToDealTuple } from '../lib/deal-mapper.js'
 import {
   sanitizeSchema,
   sanitizeId,
@@ -588,17 +589,9 @@ export async function runClassifyPipeline() {
     // Batch upsert deals via batcher
     if (dealThreads.length > 0) {
       const dealValues = dealThreads.map((thread) => {
-        const threadId = sanitizeId(thread.thread_id)
-        const userId = userByThread[threadId] ? sanitizeId(userByThread[threadId]) : ''
-        const dealId = threadId
-        const dealName = sanitizeString(thread.deal_name || '')
-        const dealType = sanitizeString(thread.deal_type || '')
-        const dealValue =
-          typeof thread.deal_value === 'string' ? parseFloat(thread.deal_value) || 0 : 0
-        const currency = sanitizeString(thread.currency || 'USD')
-        const brand = thread.main_contact ? sanitizeString(thread.main_contact.company || '') : ''
-        const category = sanitizeString(thread.category || '')
-        return `('${dealId}', '${userId}', '${threadId}', '', '${dealName}', '${dealType}', '${category}', ${dealValue}, '${currency}', '${brand}', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        const lookupKey = sanitizeId(thread.thread_id)
+        const userId = userByThread[lookupKey] || ''
+        return threadToDealTuple(thread, { userId })
       })
 
       await batcher.pushDeals(dealValues)
