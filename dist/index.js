@@ -27845,7 +27845,7 @@ const audits = {
   findByThread: (schema, threadId) => {
     const s = sanitizeSchema(schema);
     const safeTid = sanitizeId(threadId);
-    return `SELECT A.AI_EVALUATION FROM ${s}.AI_EVALUATION_AUDITS A JOIN ${s}.EMAIL_THREAD_EVALUATIONS E ON E.AI_EVALUATION_AUDIT_ID = A.ID WHERE E.THREAD_ID = '${safeTid}' LIMIT 1`
+    return `SELECT A.AI_EVALUATION FROM ${s}.AI_EVALUATION_AUDITS A JOIN ${s}.DEAL_STATES D ON D.BATCH_ID = A.BATCH_ID WHERE D.THREAD_ID = '${safeTid}' LIMIT 1`
   },
 };
 
