@@ -17,6 +17,7 @@ The pipeline is orchestrated by GitHub Actions workflows triggered by W3.
 | `sync-deal-states`      | Paginated sync of missing deal_states from email_metadata                                       |
 | `eval`                  | Multi-run AI classification against ground truth, compute recall/precision/F2 metrics           |
 | `eval-compare`          | Compare two eval results with pass/fail criteria (recall >= 95%, precision >= 40%, etc.)        |
+| `emit-scan-complete-webhooks` | Cron-oriented: SxT eligibility query (first completed LOOKBACK) → Firestore dedupe (`users/{id}.scanCompleteSentAt`) → `POST /dealsync-v2/webhooks` (`scan_complete`). See `docs/plans/2026-04-16-scan-complete-w3-cron-tech-spec.md`. |
 
 ## Workflows
 
@@ -65,6 +66,20 @@ Email arrives → metadata ingestion (GCP) → email_metadata in SxT
 | `SXT_SCHEMA`          | Schema name (e.g., `DEALSYNC_STG_V1`)               |
 | `CONTENT_FETCHER_URL` | Email content fetcher service URL                   |
 | `HYPERBOLIC_KEY`      | Hyperbolic AI API key                               |
+
+### `emit-scan-complete-webhooks` (lifecycle / cron)
+
+| Input / secret | Purpose |
+| -------------- | ------- |
+| `command` | `emit-scan-complete-webhooks` |
+| `sxt-*`, `sxt-schema`, `email-core-schema` | Same as other commands — Space and Time access |
+| `dealsync-backend-base-url` | Backend base URL (no trailing slash), e.g. `https://api.example.com` |
+| `dealsync-v2-shared-secret` | `DEALSYNC_V2_SHARED_SECRET` → header `x-shared-secret` |
+| `firestore-service-account-json` | Full GCP service account JSON (Firestore read-only role on `users` is enough) |
+| `firestore-project-id` | Optional if JSON contains `project_id` |
+| `scan-complete-webhook-concurrency` | Max parallel Firestore reads + webhook POSTs per batch (default `5`) |
+
+Schedule this command from W3 or GitHub Actions on a 5–15 minute cadence; wire secrets in the host’s secret store. SQL builder: `src/lib/sql/scan-complete-eligibility.js` (parity with `backend/src/services/dealsync-v2.sync.service.ts`).
 
 ## Development
 

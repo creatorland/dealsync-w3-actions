@@ -29,6 +29,8 @@
     "testMatch": [
       "**/__tests__/**/*.test.js"
     ],
-    "transform": {}
+    "transform": {
+      "^.+\\.md$": "<rootDir>/__tests__/transform-md.cjs"
+    }
   }
 }

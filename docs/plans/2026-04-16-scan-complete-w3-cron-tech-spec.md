@@ -249,7 +249,7 @@ LIMIT 1;
 | `db_not_interested` | `dealCounts.notInterested` (optional) |
 | `contacts_added` | `contactsAdded` |
 
-**Canonical query shape** (must mirror backend fragments above; substitute `${emailCoreSchema}` / `${dealsyncSchema}` per `action.yml` `schema` + `email-core-schema` inputs and SxT identifier rules in `src/lib/queries.js`):
+**Canonical query shape** (must mirror backend fragments above; substitute schema names via `sanitizeSchema` in `src/lib/sql/scan-complete-eligibility.js` per `action.yml` `sxt-schema` + `email-core-schema`):
 
 ```sql
 WITH latest_sync AS (
@@ -365,7 +365,7 @@ LEFT JOIN contact_agg ca ON ca.user_id = e.user_id
 ORDER BY e.initiated_at DESC;
 ```
 
-**Implementation note:** `dealsync-action` today uppercases SxT column names in many paths (`src/lib/queries.js`). When mapping row objects to the webhook body, normalize keys consistently (either quote aliases in SQL to match backend lowercase snake names or map `USER_ID` → `userId` in code).
+**Implementation note:** SxT returns UPPERCASE column names; map to webhook DTO in `src/lib/scan-complete.js` (`rowToScanCompleteWebhookBody`).
 
 ---
 
@@ -420,10 +420,10 @@ ORDER BY e.initiated_at DESC;
 | `src/main.js` | Register new command |
 | `action.yml` | New inputs: backend base URL, shared secret, Firestore/GCP, webhook concurrency; document command |
 | `src/lib/sxt-client.js` | Execute eligibility SQL |
-| `src/lib/queries.js` | Optional: table name / schema helpers consistent with existing SxT conventions |
+| `src/lib/sql/sanitize.js` | Schema sanitization (shared with other SQL builders) |
 | `src/commands/sxt-execute.js` | Pattern for parameterized SQL execution |
-| New: `src/lib/scan-complete-eligibility.sql.md` or `src/queries/scan-complete-eligible-users.sql` | **Documented** SQL copy with backend file/line references |
-| New: `src/commands/emit-scan-complete-webhooks.js` (name TBD) | Orchestrate query → Firestore → POST |
+| `src/lib/sql/scan-complete-eligibility.js` | `scanCompleteEligibility.selectEligibleUsers` — parity SQL with backend references in file header |
+| `src/commands/emit-scan-complete-webhooks.js` | Orchestrate query → Firestore → POST |
 | New tests under `__tests__/` | Mock `fetch`, Firestore, SxT |
 
 ### Backend files (parity — do not drift)
@@ -439,8 +439,8 @@ ORDER BY e.initiated_at DESC;
 
 ## Implementation plan (ordered by dependency)
 
-1. **Add SQL artifact** — Single module/file containing the canonical cron query + comments linking to `dealsync-v2.sync.service.ts`. Verify schema placeholders match production staging/prod naming.
-2. **Firestore read helper** — Initialize admin or REST client from env; `getScanCompleteSentAt(userId)` → boolean or timestamp.
+1. **Add SQL builder** — `src/lib/sql/scan-complete-eligibility.js` (`scanCompleteEligibility.selectEligibleUsers`) + comments linking to `dealsync-v2.sync.service.ts`. Verify schema placeholders match production staging/prod naming.
+2. **Firestore read helper** — REST + OAuth token from service account JSON (`src/lib/scan-complete.js`); `userHasScanCompleteSentAt` → boolean.
 3. **Webhook client** — `POST {BACKEND_URL}/dealsync-v2/webhooks` with headers/body matching existing daily-digest automation; handle non-2xx with structured logs.
 4. **Command implementation** — `executeSql` → map rows → for each user Firestore check → POST; respect concurrency limit; return summary JSON `{ scanned, skippedDeduped, posted, errors }`.
 5. **action.yml + README** — Document inputs, secrets, and W3 example.
