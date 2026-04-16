@@ -63,11 +63,13 @@ describe('sync-deal-states command', () => {
     fetchSpy.mockRestore()
   })
 
-  // Helper: mock auth + sync + 2 sweep queries (filter + classify exhausted batches)
-  function mockSyncFlow(syncRows = []) {
+  // Helper: mock auth + N sync chunks + 2 sweep queries (filter + classify exhausted batches)
+  function mockSyncFlow(syncChunks = [[]]) {
+    fetchSpy.mockResolvedValueOnce(authResponse())
+    for (const rows of syncChunks) {
+      fetchSpy.mockResolvedValueOnce(sxtResponse(rows))
+    }
     fetchSpy
-      .mockResolvedValueOnce(authResponse()) // auth
-      .mockResolvedValueOnce(sxtResponse(syncRows)) // sync INSERT...SELECT
       .mockResolvedValueOnce(sxtResponse([])) // findDeadBatches (filtering)
       .mockResolvedValueOnce(sxtResponse([])) // findDeadBatches (classifying)
   }
@@ -75,26 +77,24 @@ describe('sync-deal-states command', () => {
   it('runs single INSERT...SELECT and returns synced_count from row count', async () => {
     mockInputs()
 
-    const insertedRows = [{}, {}]
-    mockSyncFlow(insertedRows)
+    mockSyncFlow([[{ UPDATED: 2 }], []])
 
     const result = await runSyncDealStates()
 
     expect(result).toEqual({ synced_count: 2, dead_lettered: 0 })
 
     const sqlCalls = getSqlCalls(fetchSpy)
-    expect(sqlCalls).toHaveLength(3)
+    expect(sqlCalls).toHaveLength(4)
 
     const sql = getSqlText(sqlCalls[0])
     expect(sql).toContain('INSERT INTO dealsync_stg_v1.DEAL_STATES')
     expect(sql).toContain('EMAIL_CORE_STAGING.EMAIL_METADATA')
     expect(sql).toContain('NOT EXISTS')
-    expect(sql).toContain('ON CONFLICT (EMAIL_METADATA_ID)')
   })
 
   it('returns synced_count=0 when insert returns no rows', async () => {
     mockInputs()
-    mockSyncFlow([])
+    mockSyncFlow([[]])
 
     const result = await runSyncDealStates()
 
@@ -108,7 +108,7 @@ describe('sync-deal-states command', () => {
 
   it('authenticates via proxy with x-shared-secret', async () => {
     mockInputs()
-    mockSyncFlow([])
+    mockSyncFlow([[]])
 
     await runSyncDealStates()
 
@@ -120,7 +120,7 @@ describe('sync-deal-states command', () => {
 
   it('uses email-core-schema input in SQL', async () => {
     mockInputs({ 'email-core-schema': 'MY_CORE' })
-    mockSyncFlow([])
+    mockSyncFlow([[]])
 
     await runSyncDealStates()
 

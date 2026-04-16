@@ -138,7 +138,6 @@ describe('dealStates', () => {
       expect(sql).toContain(`INSERT INTO ${S}.DEAL_STATES`)
       expect(sql).toContain('FROM EMAIL_CORE_STAGING.EMAIL_METADATA')
       expect(sql).toContain('NOT EXISTS')
-      expect(sql).toContain('ON CONFLICT (EMAIL_METADATA_ID)')
     })
   })
 

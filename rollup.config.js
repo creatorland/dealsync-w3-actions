@@ -7,7 +7,7 @@ const plugins = [
   nodeResolve({ preferBuiltins: true }),
   commonjs(),
   json(),
-  string({ include: '**/*.md' }),
+  string({ include: ['**/*.md', '**/*.sql'] }),
 ]
 
 export default [

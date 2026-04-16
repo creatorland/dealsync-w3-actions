@@ -13,6 +13,7 @@
   "dependencies": {
     "@actions/core": "^1.11.1",
     "email-reply-parser": "^2.3.5",
+    "google-auth-library": "^9.15.1",
     "html-to-text": "^9.0.5",
     "uuid": "^13.0.0"
   },
@@ -29,6 +30,11 @@
     "testMatch": [
       "**/__tests__/**/*.test.js"
     ],
-    "transform": {}
+    "transform": {
+      "^.+\\.md$": "<rootDir>/__tests__/transform-md.cjs"
+    },
+    "moduleNameMapper": {
+      "^.*scan-complete-eligible-users\\.sql$": "<rootDir>/__tests__/fixtures/scan-complete-eligible-sql.cjs"
+    }
   }
 }
