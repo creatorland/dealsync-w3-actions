@@ -81,18 +81,18 @@ export async function runEval() {
   let totalInputTokens = 0
   let totalOutputTokens = 0
 
+  // Split ground truth into batches (0 = all at once) — same for every run
+  const batches = []
+  if (batchSize > 0) {
+    for (let i = 0; i < usableEntries.length; i += batchSize) {
+      batches.push(usableEntries.slice(i, i + batchSize))
+    }
+  } else {
+    batches.push(usableEntries)
+  }
+
   for (let run = 1; run <= numRuns; run++) {
     console.log(`[eval] --- run ${run}/${numRuns} ---`)
-
-    // Split ground truth into batches (0 = all at once)
-    const batches = []
-    if (batchSize > 0) {
-      for (let i = 0; i < usableEntries.length; i += batchSize) {
-        batches.push(usableEntries.slice(i, i + batchSize))
-      }
-    } else {
-      batches.push(usableEntries)
-    }
 
     const runHealth = {
       clean: 0,

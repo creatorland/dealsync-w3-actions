@@ -70,8 +70,6 @@ export function sanitizeEmailBody(body) {
     .replace(/^\s+$/gm, '') // Remove whitespace-only lines
     .trim()
 
-  // No truncation — full content sent to model
-
   return text
 }
 
