@@ -92,7 +92,7 @@ describe('runEvalCompare', () => {
 
     const result = await runEvalCompare()
     expect(result.pass_fail.verdict).toBe('FAIL')
-    expect(result.pass_fail.b_recall_above_95).toBe(false)
+    expect(result.pass_fail.b_recall_above_min).toBe(false)
     expect(result.comparison.recall.winner).toBe('a')
     expect(result.comparison.recall.delta).toBeCloseTo(-0.06, 2)
   })
@@ -151,6 +151,32 @@ describe('runEvalCompare', () => {
     expect(result.pass_fail.verdict).toBe('PASS')
     expect(result.comparison.recall.winner).toBe('b')
     expect(result.comparison.f2.winner).toBe('b')
+  })
+
+  it('result includes report_markdown with key sections', async () => {
+    const a = makeResult()
+    const b = makeResult({
+      detection: {
+        recall: { mean: 0.98, min: 0.97, max: 0.99, stddev: 0.005 },
+        precision: { mean: 0.5, min: 0.48, max: 0.52, stddev: 0.01 },
+        f2: { mean: 0.88, min: 0.86, max: 0.9, stddev: 0.01 },
+      },
+      categorization: { accuracy: { mean: 0.92, min: 0.9, max: 0.94, stddev: 0.01 } },
+    })
+    core.getInput.mockImplementation((name) => {
+      if (name === 'result-a') return JSON.stringify(a)
+      if (name === 'result-b') return JSON.stringify(b)
+      return ''
+    })
+
+    const result = await runEvalCompare()
+    expect(result.report_markdown).toBeDefined()
+    expect(result.report_markdown).toContain('# A/B Eval Report')
+    expect(result.report_markdown).toContain('## Detection Metrics')
+    expect(result.report_markdown).toContain('## Pass/Fail Verdict')
+    expect(result.report_markdown).toContain('PASS')
+    expect(result.report_markdown).toContain('Recall')
+    expect(result.report_markdown).toContain('Precision')
   })
 
   it('throws when inputs missing', async () => {
