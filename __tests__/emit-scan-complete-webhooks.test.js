@@ -10,15 +10,21 @@ describe('parsePositiveIntegerInput', () => {
   })
 
   it('rejects invalid values', () => {
-    expect(() =>
-      parsePositiveIntegerInput('', 'scan-complete-webhook-concurrency'),
-    ).toThrow('scan-complete-webhook-concurrency must be a positive integer')
-    expect(() =>
-      parsePositiveIntegerInput('abc', 'scan-complete-webhook-concurrency'),
-    ).toThrow('scan-complete-webhook-concurrency must be a positive integer')
-    expect(() =>
-      parsePositiveIntegerInput('0', 'scan-complete-webhook-concurrency'),
-    ).toThrow('scan-complete-webhook-concurrency must be a positive integer')
+    expect(() => parsePositiveIntegerInput('', 'scan-complete-webhook-concurrency')).toThrow(
+      'scan-complete-webhook-concurrency must be a positive integer',
+    )
+    expect(() => parsePositiveIntegerInput('abc', 'scan-complete-webhook-concurrency')).toThrow(
+      'scan-complete-webhook-concurrency must be a positive integer',
+    )
+    expect(() => parsePositiveIntegerInput('0', 'scan-complete-webhook-concurrency')).toThrow(
+      'scan-complete-webhook-concurrency must be a positive integer',
+    )
+    expect(() => parsePositiveIntegerInput('5.5', 'scan-complete-webhook-concurrency')).toThrow(
+      'scan-complete-webhook-concurrency must be a positive integer',
+    )
+    expect(() => parsePositiveIntegerInput('5e2', 'scan-complete-webhook-concurrency')).toThrow(
+      'scan-complete-webhook-concurrency must be a positive integer',
+    )
   })
 })
 

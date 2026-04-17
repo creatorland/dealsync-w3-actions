@@ -16,15 +16,10 @@ import {
  */
 export function parsePositiveIntegerInput(raw, inputName) {
   const normalized = String(raw ?? '').trim()
-  if (normalized === '') {
+  if (!/^[1-9][0-9]*$/.test(normalized)) {
     throw new Error(`${inputName} must be a positive integer`)
   }
-
-  const parsed = Number.parseInt(normalized, 10)
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    throw new Error(`${inputName} must be a positive integer`)
-  }
-  return parsed
+  return Number(normalized)
 }
 
 /**
