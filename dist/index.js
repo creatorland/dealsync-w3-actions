@@ -38143,6 +38143,8 @@ async function runEval() {
       total_batches: batches.length,
     };
 
+    const MAX_BATCH_ATTEMPTS = 10;
+
     // Process batches with concurrency pool
     async function processBatch(batch, batchIdx) {
       const allEmails = batch.flatMap((gt) => gt.emails);
@@ -38152,26 +38154,38 @@ async function runEval() {
         { role: 'user', content: userPrompt },
       ];
 
-      let rawContent = null;
-      let usage = {};
-      try {
-        const result = await callModel$1(model, messages, { temperature, ...aiOpts });
-        rawContent = result.content;
-        usage = result.usage || {};
-      } catch (apiErr) {
-        console.log(`[eval] run ${run} batch ${batchIdx + 1} API failed: ${apiErr.message}`);
-        return { threads: [], health: 'failed', usage }
-      }
+      for (let attempt = 1; attempt <= MAX_BATCH_ATTEMPTS; attempt++) {
+        let rawContent = null;
+        let usage = {};
+        try {
+          const result = await callModel$1(model, messages, { temperature, ...aiOpts });
+          rawContent = result.content;
+          usage = result.usage || {};
+        } catch (apiErr) {
+          console.log(`[eval] run ${run} batch ${batchIdx + 1} attempt ${attempt}/${MAX_BATCH_ATTEMPTS} API failed: ${apiErr.message}`);
+          if (attempt < MAX_BATCH_ATTEMPTS) {
+            const delay = backoffMs(attempt - 1, { base: 2000, max: 30000, jitter: true });
+            console.log(`[eval] retrying batch ${batchIdx + 1} in ${delay}ms`);
+            await sleep(delay);
+            continue
+          }
+          return { threads: [], health: 'failed', usage }
+        }
 
-      // json_schema enforces structure — just parse and coerce
-      try {
-        const parsed = parseAndValidate$1(rawContent, threadOrder);
-        return { threads: parsed, health: 'clean', usage }
-      } catch (parseErr) {
-        console.log(
-          `[eval] run ${run} batch ${batchIdx + 1}: parse failed: ${parseErr.message}`,
-        );
-        return { threads: [], health: 'failed', usage }
+        // json_schema enforces structure — just parse and coerce
+        try {
+          const parsed = parseAndValidate$1(rawContent, threadOrder);
+          return { threads: parsed, health: 'clean', usage }
+        } catch (parseErr) {
+          console.log(`[eval] run ${run} batch ${batchIdx + 1} attempt ${attempt}/${MAX_BATCH_ATTEMPTS} parse failed: ${parseErr.message}`);
+          if (attempt < MAX_BATCH_ATTEMPTS) {
+            const delay = backoffMs(attempt - 1, { base: 2000, max: 30000, jitter: true });
+            console.log(`[eval] retrying batch ${batchIdx + 1} in ${delay}ms`);
+            await sleep(delay);
+            continue
+          }
+          return { threads: [], health: 'failed', usage }
+        }
       }
     }
 
