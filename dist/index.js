@@ -27910,13 +27910,15 @@ const PER_THREAD_SENDER_SCAN_LIMIT = 500;
 
 const emailSenders = {
   /**
-   * @param {string} coreSchema - sanitized schema name
-   * @param {string} quotedThreadId - already-quoted thread id literal, e.g. `'th-1'`
-   * @param {string} quotedUserId - already-quoted user id literal, e.g. `'u-1'`
+   * @param {string} coreSchema - schema name (validated)
+   * @param {string} threadId - raw thread id, e.g. th-1
+   * @param {string} userId - raw user id from EMAIL_METADATA / batch rows
    */
-  selectForThreadUser: (coreSchema, quotedThreadId, quotedUserId) => {
+  selectForThreadUser: (coreSchema, threadId, userId) => {
     const s = sanitizeSchema(coreSchema);
-    return `SELECT em.THREAD_ID, em.RECEIVED_AT, es.SENDER_EMAIL, es.SENDER_NAME FROM ${s}.EMAIL_METADATA em INNER JOIN ${s}.EMAIL_SENDERS es ON es.EMAIL_METADATA_ID = em.ID WHERE em.THREAD_ID = ${quotedThreadId} AND em.USER_ID = ${quotedUserId} ORDER BY em.RECEIVED_AT DESC LIMIT ${PER_THREAD_SENDER_SCAN_LIMIT}`
+    const qt = `'${sanitizeId(String(threadId))}'`;
+    const qu = `'${sanitizeId(String(userId))}'`;
+    return `SELECT em.THREAD_ID, em.RECEIVED_AT, es.SENDER_EMAIL, es.SENDER_NAME FROM ${s}.EMAIL_METADATA em INNER JOIN ${s}.EMAIL_SENDERS es ON es.EMAIL_METADATA_ID = em.ID WHERE em.THREAD_ID = ${qt} AND em.USER_ID = ${qu} ORDER BY em.RECEIVED_AT DESC LIMIT ${PER_THREAD_SENDER_SCAN_LIMIT}`
   },
 };
 
@@ -39769,19 +39771,17 @@ async function runClassifyPipeline() {
           const latestByThread = {};
           for (const thread of stillMissing) {
             const tid = thread.thread_id;
-            const threadKey = sanitizeId(tid);
-            const batchUserId = userByThread[threadKey];
-            if (!batchUserId) {
-              console.error(
-                `[run-classify-pipeline] main_contact DB fallback skipped for thread ${tid}: no USER_ID on claimed batch rows`,
-              );
-              continue
-            }
-            const quotedTid = `'${threadKey}'`;
-            const quotedUid = `'${sanitizeId(batchUserId)}'`;
             try {
+              const threadKey = sanitizeId(String(tid));
+              const batchUserId = userByThread[threadKey] ?? userByThread[tid];
+              if (!batchUserId) {
+                console.error(
+                  `[run-classify-pipeline] main_contact DB fallback skipped for thread ${tid}: no USER_ID on claimed batch rows`,
+                );
+                continue
+              }
               const senderRows = await execNoRL(
-                emailSenders.selectForThreadUser(coreSchema, quotedTid, quotedUid),
+                emailSenders.selectForThreadUser(coreSchema, threadKey, batchUserId),
               );
               for (const row of senderRows || []) {
                 if (row.THREAD_ID !== tid) continue

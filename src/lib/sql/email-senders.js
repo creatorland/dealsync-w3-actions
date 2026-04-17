@@ -11,19 +11,21 @@
 //   - Rows are returned ORDER BY RECEIVED_AT DESC so the caller can pick
 //     the latest usable sender per thread in JS.
 
-import { sanitizeSchema } from './sanitize.js'
+import { sanitizeSchema, sanitizeId } from './sanitize.js'
 
 /** Max rows scanned per thread; caller stops at first usable sender. */
 const PER_THREAD_SENDER_SCAN_LIMIT = 500
 
 export const emailSenders = {
   /**
-   * @param {string} coreSchema - sanitized schema name
-   * @param {string} quotedThreadId - already-quoted thread id literal, e.g. `'th-1'`
-   * @param {string} quotedUserId - already-quoted user id literal, e.g. `'u-1'`
+   * @param {string} coreSchema - schema name (validated)
+   * @param {string} threadId - raw thread id, e.g. th-1
+   * @param {string} userId - raw user id from EMAIL_METADATA / batch rows
    */
-  selectForThreadUser: (coreSchema, quotedThreadId, quotedUserId) => {
+  selectForThreadUser: (coreSchema, threadId, userId) => {
     const s = sanitizeSchema(coreSchema)
-    return `SELECT em.THREAD_ID, em.RECEIVED_AT, es.SENDER_EMAIL, es.SENDER_NAME FROM ${s}.EMAIL_METADATA em INNER JOIN ${s}.EMAIL_SENDERS es ON es.EMAIL_METADATA_ID = em.ID WHERE em.THREAD_ID = ${quotedThreadId} AND em.USER_ID = ${quotedUserId} ORDER BY em.RECEIVED_AT DESC LIMIT ${PER_THREAD_SENDER_SCAN_LIMIT}`
+    const qt = `'${sanitizeId(String(threadId))}'`
+    const qu = `'${sanitizeId(String(userId))}'`
+    return `SELECT em.THREAD_ID, em.RECEIVED_AT, es.SENDER_EMAIL, es.SENDER_NAME FROM ${s}.EMAIL_METADATA em INNER JOIN ${s}.EMAIL_SENDERS es ON es.EMAIL_METADATA_ID = em.ID WHERE em.THREAD_ID = ${qt} AND em.USER_ID = ${qu} ORDER BY em.RECEIVED_AT DESC LIMIT ${PER_THREAD_SENDER_SCAN_LIMIT}`
   },
 }

@@ -661,19 +661,17 @@ export async function runClassifyPipeline() {
           const latestByThread = {}
           for (const thread of stillMissing) {
             const tid = thread.thread_id
-            const threadKey = sanitizeId(tid)
-            const batchUserId = userByThread[threadKey]
-            if (!batchUserId) {
-              console.error(
-                `[run-classify-pipeline] main_contact DB fallback skipped for thread ${tid}: no USER_ID on claimed batch rows`,
-              )
-              continue
-            }
-            const quotedTid = `'${threadKey}'`
-            const quotedUid = `'${sanitizeId(batchUserId)}'`
             try {
+              const threadKey = sanitizeId(String(tid))
+              const batchUserId = userByThread[threadKey] ?? userByThread[tid]
+              if (!batchUserId) {
+                console.error(
+                  `[run-classify-pipeline] main_contact DB fallback skipped for thread ${tid}: no USER_ID on claimed batch rows`,
+                )
+                continue
+              }
               const senderRows = await execNoRL(
-                emailSendersSql.selectForThreadUser(coreSchema, quotedTid, quotedUid),
+                emailSendersSql.selectForThreadUser(coreSchema, threadKey, batchUserId),
               )
               for (const row of senderRows || []) {
                 if (row.THREAD_ID !== tid) continue
