@@ -711,12 +711,10 @@ export async function runClassifyPipeline() {
 
       for (const thread of dealThreads) {
         const mc = thread.main_contact
-        if (!mc) continue
-        const email = (mc.email || '').trim().toLowerCase()
-        if (!email) continue
+        // Same bar as Step 6a (creator, blocked/automated senders, empty email)
+        if (!isUsableContact(mc)) continue
 
-        // Skip creator's own email — AI sometimes ignores the "external only" rule
-        if (creatorEmail && email === creatorEmail.trim().toLowerCase()) continue
+        const email = (mc.email || '').trim().toLowerCase()
 
         const threadId = sanitizeId(thread.thread_id)
         const userId = userByThread[threadId] ? sanitizeId(userByThread[threadId]) : ''
