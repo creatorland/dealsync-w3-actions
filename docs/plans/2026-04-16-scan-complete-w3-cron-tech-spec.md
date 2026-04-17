@@ -411,7 +411,7 @@ ORDER BY e.initiated_at DESC;
 
 - Commands are registered in `src/main.js` (`COMMANDS` map) and exposed via `action.yml` `command` input.
 - SxT access uses `src/lib/db.js` (`authenticate`, `executeSql`).
-- Schema names: `schema` (dealsync) and `email-core-schema` (default `EMAIL_CORE_STAGING`) per `action.yml`.
+- Schema inputs in `action.yml`: `sxt-schema` (dealsync) and `email-core-schema` (default `EMAIL_CORE_STAGING`).
 
 ### Files to reference
 
