@@ -46,7 +46,7 @@ jobs:
       - id: run-eval
         name: Run evaluation
         timeout-minutes: 60
-        uses: creatorland/dealsync-action@5a2cce4
+        uses: creatorland/dealsync-action@30b0887
         with:
           command: eval
           ai-api-key: ${{ secrets.AI_API_KEY }}

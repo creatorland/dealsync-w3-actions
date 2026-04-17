@@ -42,7 +42,7 @@ jobs:
       - id: run-eval
         name: Evaluate candidate
         timeout-minutes: 60
-        uses: creatorland/dealsync-action@0f1f6c9
+        uses: creatorland/dealsync-action@30b0887
         with:
           command: eval
           ai-api-key: ${{ secrets.AI_API_KEY }}
@@ -62,7 +62,7 @@ jobs:
       - id: compare
         name: Compare against baseline
         timeout-minutes: 60
-        uses: creatorland/dealsync-action@0f1f6c9
+        uses: creatorland/dealsync-action@30b0887
         with:
           command: eval-compare
           result-b: ${{ needs.eval-candidate.outputs.result }}
