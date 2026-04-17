@@ -35511,7 +35511,9 @@ function parseAndValidate$1(raw, threadOrder) {
 
   return items.map((r) => ({
     thread_id:
-      String(r.thread_id || ''),
+      threadOrder && r.thread_index != null
+        ? threadOrder[Math.max(0, Number(r.thread_index) - 1)] || String(r.thread_id || '')
+        : String(r.thread_id || ''),
     is_deal: Boolean(r.is_deal),
     is_english: r.is_english !== false,
     language: r.language || null,
@@ -38144,7 +38146,7 @@ async function runEval() {
     // Process batches with concurrency pool
     async function processBatch(batch, batchIdx) {
       const allEmails = batch.flatMap((gt) => gt.emails);
-      const { systemPrompt, userPrompt } = buildPrompt$1(allEmails, promptOverrides);
+      const { systemPrompt, userPrompt, threadOrder } = buildPrompt$1(allEmails, promptOverrides);
       const messages = [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -38163,7 +38165,7 @@ async function runEval() {
 
       // json_schema enforces structure — just parse and coerce
       try {
-        const parsed = parseAndValidate$1(rawContent);
+        const parsed = parseAndValidate$1(rawContent, threadOrder);
         return { threads: parsed, health: 'clean', usage }
       } catch (parseErr) {
         console.log(

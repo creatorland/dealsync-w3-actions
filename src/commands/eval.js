@@ -98,7 +98,7 @@ export async function runEval() {
     // Process batches with concurrency pool
     async function processBatch(batch, batchIdx) {
       const allEmails = batch.flatMap((gt) => gt.emails)
-      const { systemPrompt, userPrompt } = buildPrompt(allEmails, promptOverrides)
+      const { systemPrompt, userPrompt, threadOrder } = buildPrompt(allEmails, promptOverrides)
       const messages = [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -117,7 +117,7 @@ export async function runEval() {
 
       // json_schema enforces structure — just parse and coerce
       try {
-        const parsed = parseAndValidate(rawContent)
+        const parsed = parseAndValidate(rawContent, threadOrder)
         return { threads: parsed, health: 'clean', usage }
       } catch (parseErr) {
         console.log(
