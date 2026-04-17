@@ -37,12 +37,18 @@ export async function runEval() {
   const batchSize = parseInt(core.getInput('batch-size') || '1', 10)
   const concurrency = parseInt(core.getInput('concurrency') || '10', 10)
   const promptHash = core.getInput('prompt-hash') || ''
+  const systemPromptInput = core.getInput('system-prompt') || ''
+  const userPromptInput = core.getInput('user-prompt') || ''
 
   if (!hyperbolicKey) throw new Error('ai-api-key is required for eval')
 
-  // Fetch prompts from a specific commit hash, or use bundled defaults
+  // Priority: direct prompt inputs > commit hash > bundled defaults
   let promptOverrides = {}
-  if (promptHash) {
+  if (systemPromptInput || userPromptInput) {
+    console.log(`[eval] using inline prompt overrides (system=${systemPromptInput.length} chars, user=${userPromptInput.length} chars)`)
+    if (systemPromptInput) promptOverrides.systemOverride = systemPromptInput
+    if (userPromptInput) promptOverrides.userOverride = userPromptInput
+  } else if (promptHash) {
     console.log(`[eval] fetching prompts from commit ${promptHash}`)
     promptOverrides = await fetchPromptsByHash(promptHash)
   }
