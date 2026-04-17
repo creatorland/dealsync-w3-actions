@@ -20,6 +20,12 @@ describe('scanCompleteEligibility.selectEligibleUsers', () => {
       'Invalid schema',
     )
   })
+
+  it('coalesces processed_messages to zero for parity', () => {
+    const sql = scanCompleteEligibility.selectEligibleUsers('EMAIL_CORE_STAGING', 'DEALSYNC_STG_V1')
+    expect(sql).toContain('COALESCE((')
+    expect(sql).toContain('), 0) AS processed_messages')
+  })
 })
 
 describe('scan-complete row → webhook body', () => {

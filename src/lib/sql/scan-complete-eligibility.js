@@ -33,14 +33,14 @@ status_inputs AS (
     ls.sync_state_id,
     ls.created_at AS initiated_at,
     (SELECT COUNT(*) FROM ${ec}.email_metadata em WHERE em.user_id = ls.user_id) AS total_messages,
-    (
+    COALESCE((
       SELECT SUM(
         CASE WHEN ds.status NOT IN ('pending','filtering','pending_classification','classifying')
           THEN 1 ELSE 0 END
       )
       FROM ${ds}.deal_states ds
       WHERE ds.user_id = ls.user_id
-    ) AS processed_messages
+    ), 0) AS processed_messages
   FROM latest_sync ls
   WHERE ls.sync_strategy = 'LOOKBACK'
 ),

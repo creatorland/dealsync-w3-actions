@@ -10,6 +10,32 @@ import {
 } from '../lib/scan-complete.js'
 
 /**
+ * @param {string} raw
+ * @param {string} inputName
+ * @returns {number}
+ */
+export function parsePositiveIntegerInput(raw, inputName) {
+  const normalized = String(raw ?? '').trim()
+  if (normalized === '') {
+    throw new Error(`${inputName} must be a positive integer`)
+  }
+
+  const parsed = Number.parseInt(normalized, 10)
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    throw new Error(`${inputName} must be a positive integer`)
+  }
+  return parsed
+}
+
+/**
+ * @param {string} raw
+ * @returns {string}
+ */
+export function normalizeOptionalProjectId(raw) {
+  return String(raw ?? '').trim()
+}
+
+/**
  * Cron: eligible first LOOKBACK completions → Firestore dedupe → POST /dealsync-v2/webhooks (scan_complete).
  * @see docs/plans/2026-04-16-scan-complete-w3-cron-tech-spec.md
  */
@@ -24,10 +50,10 @@ export async function runEmitScanCompleteWebhooks() {
   const backendBaseUrl = core.getInput('dealsync-backend-base-url')
   const sharedSecret = core.getInput('dealsync-v2-shared-secret')
   const saJsonRaw = core.getInput('firestore-service-account-json')
-  let firestoreProjectId = core.getInput('firestore-project-id') || ''
-  const concurrency = Math.max(
-    1,
-    parseInt(core.getInput('scan-complete-webhook-concurrency') || '5', 10),
+  let firestoreProjectId = normalizeOptionalProjectId(core.getInput('firestore-project-id'))
+  const concurrency = parsePositiveIntegerInput(
+    core.getInput('scan-complete-webhook-concurrency') || '5',
+    'scan-complete-webhook-concurrency',
   )
 
   if (!authUrl || !authSecret || !apiUrl || !biscuit) {
@@ -46,7 +72,7 @@ export async function runEmitScanCompleteWebhooks() {
     throw new Error('firestore-service-account-json must be valid JSON')
   }
   if (!firestoreProjectId && typeof credentials.project_id === 'string') {
-    firestoreProjectId = credentials.project_id
+    firestoreProjectId = normalizeOptionalProjectId(credentials.project_id)
   }
   if (!firestoreProjectId) {
     throw new Error('firestore-project-id is required (or project_id in service account JSON)')
