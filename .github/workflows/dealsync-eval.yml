@@ -37,6 +37,7 @@ on:
 
 jobs:
   eval:
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     environment: '0x248d3b31f1ffc78c4dcd0993da48b6568fe1f58cfac9f61554804f505dafd140'
     outputs:
@@ -44,6 +45,7 @@ jobs:
     steps:
       - id: run-eval
         name: Run evaluation
+        timeout-minutes: 60
         uses: creatorland/dealsync-action@5a2cce4
         with:
           command: eval

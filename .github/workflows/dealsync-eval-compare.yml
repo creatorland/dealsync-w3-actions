@@ -33,6 +33,7 @@ on:
 
 jobs:
   eval-candidate:
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     environment: '0x248d3b31f1ffc78c4dcd0993da48b6568fe1f58cfac9f61554804f505dafd140'
     outputs:
@@ -40,7 +41,8 @@ jobs:
     steps:
       - id: run-eval
         name: Evaluate candidate
-        uses: creatorland/dealsync-action@7cf87b8
+        timeout-minutes: 60
+        uses: creatorland/dealsync-action@0f1f6c9
         with:
           command: eval
           ai-api-key: ${{ secrets.AI_API_KEY }}
@@ -52,13 +54,15 @@ jobs:
           batch-size: ${{ inputs.batch_size || '5' }}
 
   compare:
+    timeout-minutes: 60
     needs: [eval-candidate]
     runs-on: ubuntu-latest
     environment: '0x248d3b31f1ffc78c4dcd0993da48b6568fe1f58cfac9f61554804f505dafd140'
     steps:
       - id: compare
         name: Compare against baseline
-        uses: creatorland/dealsync-action@7cf87b8
+        timeout-minutes: 60
+        uses: creatorland/dealsync-action@0f1f6c9
         with:
           command: eval-compare
           result-b: ${{ needs.eval-candidate.outputs.result }}
