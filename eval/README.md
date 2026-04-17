@@ -173,16 +173,45 @@ To disable a criterion, set its boolean to `false` in `thresholds.json`.
 }
 ```
 
+## Writing Prompts
+
+For detailed instructions on writing prompt variants compatible with the eval system (allowed values, what to include, what to omit), see [AGENTS.md](AGENTS.md). This applies to both humans and AI agents writing prompts.
+
 ## Archiving Eval Results
 
-After each comparison, save to `eval/history/`:
+After each comparison, archive to `eval/history/` for a full audit trail.
 
-1. Create `eval/history/YYYY-MM-DD-<name>/`.
-2. Copy both prompts (system + user for each variant).
-3. Copy both result JSONs.
-4. Write `README.md` with findings, verdict, and decision.
+### Structure
 
-See [eval/history/2026-04-17-v1-vs-v3/](history/2026-04-17-v1-vs-v3/) for an example.
+```
+eval/history/YYYY-MM-DD-<name>/
+  README.md          ← findings, verdict, decision, next steps
+  system-a.md        ← variant A system prompt
+  system-b.md        ← variant B system prompt
+  user-a.md          ← variant A user prompt
+  user-b.md          ← variant B user prompt
+  result-a.json      ← variant A eval result (full JSON)
+  result-b.json      ← variant B eval result (full JSON)
+```
+
+### Steps
+
+1. Create `eval/history/YYYY-MM-DD-<name>/` (e.g. `2026-04-17-v1-vs-v3`).
+2. Copy both system and user prompts that were tested.
+3. Copy both result JSONs from the eval outputs.
+4. Write a `README.md` covering:
+   - What was tested and why
+   - Configuration (model, runs, temperature, batch size)
+   - Detection metrics table (recall, precision, F2)
+   - Sub-metrics table (category accuracy, urgency, scam detection)
+   - Per-category breakdown
+   - Regressions (which threads regressed and why)
+   - Verdict (pass/fail)
+   - Decision (adopt, reject, or iterate)
+   - Recommended next steps
+5. PR to main.
+
+See [eval/history/2026-04-17-v1-vs-v3/](history/2026-04-17-v1-vs-v3/) for a complete example.
 
 ## Required Secrets
 
