@@ -40195,9 +40195,10 @@ function firestoreDocumentHasScanCompleteSentAt(doc) {
  */
 async function userHasScanCompleteSentAt({ projectId, userId, accessToken }) {
   const path = `projects/${encodeURIComponent(projectId)}/databases/(default)/documents/users/${encodeURIComponent(userId)}`;
-  const url = `https://firestore.googleapis.com/v1/${path}`;
+  const url = new URL(`https://firestore.googleapis.com/v1/${path}`);
+  url.searchParams.set('mask.fieldPaths', 'scanCompleteSentAt');
 
-  const resp = await fetch(url, {
+  const resp = await fetch(url.toString(), {
     method: 'GET',
     headers: { Authorization: `Bearer ${accessToken}` },
     signal: AbortSignal.timeout(30000),
@@ -40292,15 +40293,10 @@ async function postScanCompleteWebhook(baseUrl, sharedSecret, body) {
  */
 function parsePositiveIntegerInput(raw, inputName) {
   const normalized = String(raw ?? '').trim();
-  if (normalized === '') {
+  if (!/^[1-9][0-9]*$/.test(normalized)) {
     throw new Error(`${inputName} must be a positive integer`)
   }
-
-  const parsed = Number.parseInt(normalized, 10);
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    throw new Error(`${inputName} must be a positive integer`)
-  }
-  return parsed
+  return Number(normalized)
 }
 
 /**
