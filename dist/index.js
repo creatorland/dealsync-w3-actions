@@ -38291,8 +38291,781 @@ var thresholds = {
 	min_precision: min_precision,
 	max_recall_stddev: max_recall_stddev};
 
+var model = "deepseek/deepseek-chat-v3-0324";
+var temperature = 0;
+var batch_size = 5;
+var prompt_hash = "bundled";
+var runs = 10;
+var successful_runs = 10;
+var detection = {
+	recall: {
+		mean: 0.9,
+		stddev: 0.0204
+	},
+	precision: {
+		mean: 0.9646},
+	f2: {
+		mean: 0.9121}
+};
+var categorization = {
+	accuracy: {
+		mean: 0.639},
+	per_category: {
+		completed: {
+			mean: 1,
+			min: 1,
+			max: 1,
+			stddev: 0,
+			ground_truth_count: 2
+		},
+		not_interested: {
+			mean: 0.6044,
+			min: 0.3,
+			max: 0.8,
+			stddev: 0.1837,
+			ground_truth_count: 10
+		},
+		"new": {
+			mean: 1,
+			min: 1,
+			max: 1,
+			stddev: 0,
+			ground_truth_count: 1
+		},
+		in_progress: {
+			mean: 0.7143,
+			min: 0.5714,
+			max: 0.8571,
+			stddev: 0.0639,
+			ground_truth_count: 7
+		},
+		likely_scam: {
+			mean: 0.3333,
+			min: 0.3333,
+			max: 0.3333,
+			stddev: 0,
+			ground_truth_count: 4
+		}
+	}
+};
+var urgency_scoring = {
+	in_range_rate: {
+		mean: 0.4816}
+};
+var scam_detection = {
+	accuracy: {
+		mean: 0.5}};
+var json_health = {
+	clean_parse_rate: {
+		mean: 1},
+	corrective_retry_rate: {
+		mean: 0},
+	total_failures: 0
+};
+var cost = {
+	avg_cost_per_thread: 0.013466
+};
+var per_thread = [
+	{
+		id: "gt-001",
+		description: "Contract signed, all deliverables confirmed completed, payment processed....",
+		expected: {
+			is_deal: true,
+			category: "completed",
+			likely_scam: false,
+			score_range: [
+				9,
+				10
+			]
+		},
+		detection_correct: 10,
+		category_correct: 10,
+		score_in_range: 0,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-002",
+		description: "All deliverables fulfilled, final payment processed, performance metrics...",
+		expected: {
+			is_deal: true,
+			category: "completed",
+			likely_scam: false,
+			score_range: [
+				9,
+				10
+			]
+		},
+		detection_correct: 10,
+		category_correct: 10,
+		score_in_range: 0,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-003",
+		description: "Brand outreach for paid TikTok campaign. Creator responded but platform...",
+		expected: {
+			is_deal: true,
+			category: "not_interested",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 10,
+		score_in_range: 0,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-004",
+		description: "Paid TikTok campaign for new creator-focused email product. Creator...",
+		expected: {
+			is_deal: true,
+			category: "not_interested",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-005",
+		description: "Paid YouTube campaign for Dealsync with Kennedy Goebel. Creator engaged, and...",
+		expected: {
+			is_deal: true,
+			category: "not_interested",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 10,
+		score_in_range: 0,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-006",
+		description: "Paid YouTube campaign outreach to creator Patricia. Creator declined in...",
+		expected: {
+			is_deal: true,
+			category: "not_interested",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 4,
+		score_in_range: 7,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-007",
+		description: "Paid YouTube campaign thread with creator Fischip. Creator signaled they...",
+		expected: {
+			is_deal: true,
+			category: "not_interested",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 4,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-008",
+		description: "Paid YouTube campaign opportunity outreach for Dealsync. Creator declined in...",
+		expected: {
+			is_deal: true,
+			category: "not_interested",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 8,
+		score_in_range: 5,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-009",
+		description: "Paid YouTube campaign outreach to creator Daidai. Creator declined.",
+		expected: {
+			is_deal: true,
+			category: "not_interested",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 8,
+		score_in_range: 3,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-010",
+		description: "Paid YouTube campaign outreach to creator Loren. Creator declined in thread...",
+		expected: {
+			is_deal: true,
+			category: "not_interested",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 8,
+		score_in_range: 2,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-017",
+		description: "Cold B2B service outreach about employee benefits. NOT a scam despite .info...",
+		expected: {
+			is_deal: true,
+			category: "new",
+			likely_scam: false,
+			score_range: [
+				3,
+				4
+			]
+		},
+		detection_correct: 0,
+		category_correct: 0,
+		score_in_range: 0,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-019",
+		description: "Multi-message thread about paid YouTube campaign. Creator collaboration...",
+		expected: {
+			is_deal: true,
+			category: "in_progress",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 10,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-020",
+		description: "Paid YouTube campaign opportunity with Dealsync. Active negotiation between...",
+		expected: {
+			is_deal: true,
+			category: "in_progress",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 10,
+		score_in_range: 9,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-021",
+		description: "Paid YouTube collaboration for Dealsync. Active thread with creator...",
+		expected: {
+			is_deal: true,
+			category: "in_progress",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 8,
+		score_in_range: 3,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-022",
+		description: "Paid YouTube campaign for Dealsync. Quick follow-up note from Creatorland...",
+		expected: {
+			is_deal: true,
+			category: "in_progress",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 10,
+		score_in_range: 1,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-023",
+		description: "Multi-message thread about paid YouTube campaign with creator Tadii. Active...",
+		expected: {
+			is_deal: true,
+			category: "in_progress",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 10,
+		score_in_range: 1,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-024",
+		description: "Paid YouTube campaign with Think Smart channel. Creator engaged, discussion...",
+		expected: {
+			is_deal: true,
+			category: "in_progress",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 1,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-025",
+		description: "Paid YouTube campaign discussion with Future AI creator. Creator directed to...",
+		expected: {
+			is_deal: true,
+			category: "not_interested",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 3,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-026",
+		description: "Multi-message paid YouTube campaign thread with creator Olivia Gudaniec....",
+		expected: {
+			is_deal: true,
+			category: "in_progress",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 10,
+		category_correct: 1,
+		score_in_range: 5,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-027",
+		description: "Paid YouTube campaign discussion with creator Danielle. Active collaboration...",
+		expected: {
+			is_deal: true,
+			category: "not_interested",
+			likely_scam: false,
+			score_range: [
+				7,
+				9
+			]
+		},
+		detection_correct: 6,
+		category_correct: 6,
+		score_in_range: 0,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-031",
+		description: "Scam: spoofed Nike domain (n1ke-collaborations.com), urgency pressure,...",
+		expected: {
+			is_deal: true,
+			category: "likely_scam",
+			likely_scam: true,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 10,
+		score_in_range: 2,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-032",
+		description: "Scam: tallium.info domain has no live website associated with it....",
+		expected: {
+			is_deal: true,
+			category: "likely_scam",
+			likely_scam: true,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 0,
+		scam_correct: 0,
+		total_runs: 10
+	},
+	{
+		id: "gt-034",
+		description: "Automated security notification with potential malicious links.",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-035",
+		description: "Scam: suspicious .info domain (nassaucapitalnavigation.info), unsolicited...",
+		expected: {
+			is_deal: true,
+			category: "likely_scam",
+			likely_scam: true,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 0,
+		scam_correct: 0,
+		total_runs: 10
+	},
+	{
+		id: "gt-036",
+		description: "Scam: phishing email impersonating Google Drive shared drive notification....",
+		expected: {
+			is_deal: true,
+			category: "likely_scam",
+			likely_scam: true,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 0,
+		category_correct: 0,
+		score_in_range: 7,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-039",
+		description: "Edge case: AI-powered networking intro that could be mistaken for a brand...",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 0,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-043",
+		description: "Newsletter: Digiday Daily industry newsletter about advertising/creator...",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-044",
+		description: "Newsletter: Digiday Daily newsletter about middle-tier creators in the...",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-045",
+		description: "Newsletter: beehiiv platform notification about community engagement badge....",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-047",
+		description: "Investor/VC: Short Squeez financial newsletter about private equity....",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-049",
+		description: "Investor/VC: Calendar acceptance for meeting between Plus 8 and Creatorland....",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 1,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-050",
+		description: "Newsletter",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-052",
+		description: "SaaS: GMass support thread about account management. Customer service...",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-054",
+		description: "Newsletter/article about AI and spreadsheets. Industry content marketing,...",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-057",
+		description: "Cold outreach for survey participation, not a brand deal",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 2,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-058",
+		description: "Personal/misc: Non-deal email from MBOX. Not a brand partnership.",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 2,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-059",
+		description: "Personal/misc: Non-deal email from MBOX. Not a brand partnership.",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 2,
+		category_correct: 0,
+		score_in_range: 0,
+		scam_correct: 10,
+		total_runs: 10
+	},
+	{
+		id: "gt-060",
+		description: "Personal/misc: Non-deal email from MBOX. Not a brand partnership.",
+		expected: {
+			is_deal: false,
+			category: null,
+			likely_scam: false,
+			score_range: [
+				1,
+				2
+			]
+		},
+		detection_correct: 10,
+		category_correct: 0,
+		score_in_range: 10,
+		scam_correct: 10,
+		total_runs: 10
+	}
+];
 var baseline = {
-	};
+	model: model,
+	temperature: temperature,
+	batch_size: batch_size,
+	prompt_hash: prompt_hash,
+	runs: runs,
+	successful_runs: successful_runs,
+	detection: detection,
+	categorization: categorization,
+	urgency_scoring: urgency_scoring,
+	scam_detection: scam_detection,
+	json_health: json_health,
+	cost: cost,
+	per_thread: per_thread
+};
 
 function compareMetric(valA, valB) {
   const delta = +(valB - valA).toFixed(4);

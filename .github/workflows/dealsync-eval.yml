@@ -33,7 +33,7 @@ on:
       batch_size:
         type: string
         description: Threads per AI call
-        default: '1'
+        default: '5'
 
 jobs:
   eval:
@@ -44,7 +44,7 @@ jobs:
     steps:
       - id: run-eval
         name: Run evaluation
-        uses: creatorland/dealsync-action@7cf87b8
+        uses: creatorland/dealsync-action@5a2cce4
         with:
           command: eval
           ai-api-key: ${{ secrets.AI_API_KEY }}
@@ -53,4 +53,4 @@ jobs:
           prompt-hash: ${{ inputs.prompt_hash || '' }}
           runs: ${{ inputs.runs || '10' }}
           temperature: ${{ inputs.temperature || '0' }}
-          batch-size: ${{ inputs.batch_size || '1' }}
+          batch-size: ${{ inputs.batch_size || '5' }}
