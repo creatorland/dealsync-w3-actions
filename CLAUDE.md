@@ -13,7 +13,7 @@ npm run format:write         # prettier format
 npm run format:check         # prettier check
 ```
 
-Tests use Jest with ESM; `.md` prompt imports use `__tests__/transform-md.cjs`. Run a single test:
+Tests use Jest with ESM (no transform). Run a single test:
 
 ```bash
 node --experimental-vm-modules node_modules/jest/bin/jest.js __tests__/main.test.js
