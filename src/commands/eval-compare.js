@@ -8,7 +8,7 @@ function compareMetric(valA, valB) {
   return { a: +valA.toFixed(4), b: +valB.toFixed(4), delta, winner }
 }
 
-function generateReport(a, b, comparison, perCategoryComparison, jsonComparison, costComparison, regressions, passFail, thresholds) {
+function generateReport(a, b, comparison, perCategoryComparison, jsonComparison, costComparison, regressions, passFail) {
   const lines = []
   const pct = (v) => `${(v * 100).toFixed(1)}%`
   const delta = (d) => `${d > 0 ? '+' : ''}${d}`
@@ -235,7 +235,7 @@ export async function runEvalCompare() {
     pass_fail: passFail,
   }
 
-  result.report_markdown = generateReport(a, b, comparison, perCategoryComparison, jsonComparison, costComparison, result.regressions, passFail, thresholds)
+  result.report_markdown = generateReport(a, b, comparison, perCategoryComparison, jsonComparison, costComparison, result.regressions, passFail)
 
   const fmt = (d) => `${d > 0 ? '+' : ''}${d}`
   console.log(`[eval-compare] verdict: ${passFail.verdict}`)

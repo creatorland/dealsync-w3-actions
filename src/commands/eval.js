@@ -1,6 +1,8 @@
 import * as core from '@actions/core'
 import { buildPrompt, callModel, parseAndValidate } from '../lib/ai-v2.js'
 import { sleep, backoffMs } from '../lib/retry.js'
+
+const MAX_BATCH_ATTEMPTS = 10
 import { isRejected } from '../lib/emails.js'
 import {
   computeDetectionMetrics,
@@ -101,8 +103,6 @@ export async function runEval() {
       failed: 0,
       total_batches: batches.length,
     }
-
-    const MAX_BATCH_ATTEMPTS = 10
 
     // Process batches with concurrency pool
     async function processBatch(batch, batchIdx) {

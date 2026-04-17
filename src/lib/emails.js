@@ -26,8 +26,6 @@ export function getHeader(email, name) {
   return header?.value || ''
 }
 
-// No hard cap — models have 131K+ context, truncation loses classification signal
-
 /**
  * Sanitize an email body for AI classification.
  * @param {string} body - Raw email body (may be HTML or plaintext)

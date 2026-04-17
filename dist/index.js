@@ -34808,8 +34808,6 @@ function getHeader(email, name) {
   return header?.value || ''
 }
 
-// No hard cap — models have 131K+ context, truncation loses classification signal
-
 /**
  * Sanitize an email body for AI classification.
  * @param {string} body - Raw email body (may be HTML or plaintext)
@@ -38054,6 +38052,8 @@ var groundTruth = [
 	}
 ];
 
+const MAX_BATCH_ATTEMPTS = 10;
+
 const PROMPT_BASE_URL = 'https://raw.githubusercontent.com/creatorland/dealsync-action';
 
 async function fetchPromptsByHash(hash) {
@@ -38143,8 +38143,6 @@ async function runEval() {
       failed: 0,
       total_batches: batches.length,
     };
-
-    const MAX_BATCH_ATTEMPTS = 10;
 
     // Process batches with concurrency pool
     async function processBatch(batch, batchIdx) {
@@ -39074,7 +39072,7 @@ function compareMetric(valA, valB) {
   return { a: +valA.toFixed(4), b: +valB.toFixed(4), delta, winner }
 }
 
-function generateReport(a, b, comparison, perCategoryComparison, jsonComparison, costComparison, regressions, passFail, thresholds) {
+function generateReport(a, b, comparison, perCategoryComparison, jsonComparison, costComparison, regressions, passFail) {
   const lines = [];
   const pct = (v) => `${(v * 100).toFixed(1)}%`;
   const delta = (d) => `${d > 0 ? '+' : ''}${d}`;
