@@ -125,6 +125,6 @@ SELECT
 FROM eligible e
 LEFT JOIN deal_agg da ON da.user_id = e.user_id
 LEFT JOIN contact_agg ca ON ca.user_id = e.user_id
-ORDER BY e.initiated_at DESC`
+ORDER BY e.initiated_at ASC`
   },
 }
