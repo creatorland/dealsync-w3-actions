@@ -89,9 +89,9 @@ describe('runEmitScanCompleteWebhooks orchestration', () => {
     }
   })
 
-  it('dedupes, posts, writes sentAt, and records client errors', async () => {
+  it('dedupes, posts, and records client errors without writing scanCompleteSentAt', async () => {
     const postedUsers = []
-    const patchedPaths = []
+    const firestoreWrites = []
 
     global.fetch = jest.fn(async (url, init) => {
       const u = String(url)
@@ -128,10 +128,8 @@ describe('runEmitScanCompleteWebhooks orchestration', () => {
           }
           return { ok: false, status: 404, text: async () => 'not found' }
         }
-        if (method === 'PATCH') {
-          patchedPaths.push(u)
-          return { ok: true, status: 200, body: null }
-        }
+        firestoreWrites.push({ method, url: u })
+        return { ok: true, status: 200, body: null }
       }
       if (u === 'https://api.example/dealsync-v2/webhooks' && method === 'POST') {
         const body = JSON.parse(init.body)
@@ -154,8 +152,8 @@ describe('runEmitScanCompleteWebhooks orchestration', () => {
       errors: 1,
     })
     expect(postedUsers.sort()).toEqual(['u-b', 'u-c'])
-    expect(patchedPaths).toHaveLength(1)
-    expect(patchedPaths[0]).toContain('/users/u-b')
-    expect(patchedPaths[0]).toContain('updateMask.fieldPaths=scanCompleteSentAt')
+    // Backend owns scanCompleteSentAt (transactional write in its scan_complete handler).
+    // The action must never write this field.
+    expect(firestoreWrites).toEqual([])
   })
 })
