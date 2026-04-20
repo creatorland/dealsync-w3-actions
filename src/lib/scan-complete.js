@@ -157,6 +157,58 @@ export async function userHasScanCompleteSentAt({ projectId, userId, getAccessTo
 }
 
 /**
+ * Write users/{userId}.scanCompleteSentAt = now (ms) so subsequent cron ticks dedupe.
+ * Uses updateMask so other fields are untouched; PATCH creates the doc if absent.
+ * Requires the service account to hold datastore.user (or a role granting
+ * datastore.entities.update / create) in addition to read access.
+ *
+ * @param {{ projectId: string, userId: string, getAccessToken: () => Promise<string>, nowMs?: number }} args
+ */
+export async function writeScanCompleteSentAt({ projectId, userId, getAccessToken, nowMs }) {
+  const path = `projects/${encodeURIComponent(projectId)}/databases/(default)/documents/users/${encodeURIComponent(userId)}`
+  const url = new URL(`https://firestore.googleapis.com/v1/${path}`)
+  url.searchParams.set('updateMask.fieldPaths', 'scanCompleteSentAt')
+  const ts = String(Math.floor(nowMs ?? Date.now()))
+  const body = JSON.stringify({ fields: { scanCompleteSentAt: { integerValue: ts } } })
+
+  let lastErr
+  for (let attempt = 0; attempt < TRANSIENT_MAX_ATTEMPTS; attempt++) {
+    try {
+      const accessToken = await getAccessToken()
+      const resp = await fetch(url.toString(), {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body,
+        signal: AbortSignal.timeout(30000),
+      })
+
+      if (resp.ok) {
+        await resp.body?.cancel().catch(() => {})
+        return
+      }
+      if (resp.status >= 500 && attempt < TRANSIENT_MAX_ATTEMPTS - 1) {
+        await resp.body?.cancel().catch(() => {})
+        lastErr = new Error(`Firestore PATCH ${resp.status}`)
+        await sleep(backoffMs(attempt, { base: 500, max: 4000, jitter: true }))
+        continue
+      }
+      const text = await resp.text()
+      throw new Error(`Firestore PATCH ${resp.status}: ${text}`)
+    } catch (err) {
+      lastErr = err
+      if (attempt >= TRANSIENT_MAX_ATTEMPTS - 1 || /Firestore PATCH [1-4]\d\d:/.test(err.message)) {
+        throw err
+      }
+      await sleep(backoffMs(attempt, { base: 500, max: 4000, jitter: true }))
+    }
+  }
+  throw lastErr ?? new Error('Firestore PATCH failed after retries')
+}
+
+/**
  * Coerce a single cell value from an SxT row to a finite number (else 0).
  * @param {unknown} v
  */

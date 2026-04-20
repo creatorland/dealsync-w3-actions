@@ -5,6 +5,7 @@ import { scanCompleteEligibility } from '../lib/sql/index.js'
 import {
   makeGoogleDatastoreTokenProvider,
   userHasScanCompleteSentAt,
+  writeScanCompleteSentAt,
   rowToScanCompleteWebhookBody,
   getRowUserId,
   postScanCompleteWebhook,
@@ -160,6 +161,20 @@ export async function runEmitScanCompleteWebhooks() {
           }
           posted++
           console.log(`[emit-scan-complete-webhooks] cid=${cid} posted userId=${userId}`)
+
+          try {
+            await writeScanCompleteSentAt({
+              projectId: firestoreProjectId,
+              userId,
+              getAccessToken: getFirestoreAccessToken,
+            })
+          } catch (err) {
+            // POST already succeeded; surface the dedupe-write failure but don't count as a retry
+            // signal — next tick will re-POST, and the backend is idempotent by event semantics.
+            core.warning(
+              `[emit-scan-complete-webhooks] cid=${cid} dedupe write failed userId=${userId}: ${err.message}`,
+            )
+          }
         } catch (err) {
           errors++
           core.error(
