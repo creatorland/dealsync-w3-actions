@@ -48,6 +48,7 @@ completed_candidates AS (
   SELECT *
   FROM status_inputs
   WHERE initiated_at IS NOT NULL
+    AND total_messages > 0
     AND processed_messages >= total_messages
 ),
 prior_lookback_success AS (
