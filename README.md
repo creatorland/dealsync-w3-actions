@@ -81,6 +81,8 @@ Email arrives → metadata ingestion (GCP) → email_metadata in SxT
 
 Schedule this command from W3 or GitHub Actions on a 5–15 minute cadence; wire secrets in the host’s secret store. SQL builder: `src/lib/sql/scan-complete-eligibility.js` (parity with `backend/src/services/dealsync-v2.sync.service.ts`).
 
+**Deploy order (required):** the backend must be running [creatorland/backend#1245](https://github.com/creatorland/backend/pull/1245) or later before this cron is enabled. That PR is what writes `users/{id}.scanCompleteSentAt` inside the `scan_complete` handler; without it, Firestore dedupe is never marked and every cron tick re-POSTs the same eligible users until the backend catches up. Backend idempotency (Redis lock + email-level dedupe) prevents user-visible spam, but logs will show a duplicate POST storm that is easy to mistake for a regression.
+
 ## Development
 
 ```bash
