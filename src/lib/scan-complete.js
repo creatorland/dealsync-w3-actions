@@ -74,6 +74,23 @@ export async function getGoogleDatastoreAccessToken(credentials) {
 }
 
 /**
+ * Memoizing token provider. Refreshes ~5 min before the 1h OAuth expiry so a long cron run
+ * (or a burst of retries) never fails on a stale token.
+ * @param {{ client_email: string, private_key: string }} credentials
+ * @returns {() => Promise<string>}
+ */
+export function makeGoogleDatastoreTokenProvider(credentials) {
+  let token = ''
+  let expiresAt = 0
+  return async () => {
+    if (token && Date.now() < expiresAt - 300_000) return token
+    token = await getGoogleDatastoreAccessToken(credentials)
+    expiresAt = Date.now() + 3600_000
+    return token
+  }
+}
+
+/**
  * Firestore REST encodes int64 as string; only treat as set when it parses as an integer.
  * @param {unknown} raw
  */
@@ -97,9 +114,9 @@ export function firestoreDocumentHasScanCompleteSentAt(doc) {
 }
 
 /**
- * @param {{ projectId: string, userId: string, accessToken: string }} args
+ * @param {{ projectId: string, userId: string, getAccessToken: () => Promise<string> }} args
  */
-export async function userHasScanCompleteSentAt({ projectId, userId, accessToken }) {
+export async function userHasScanCompleteSentAt({ projectId, userId, getAccessToken }) {
   const path = `projects/${encodeURIComponent(projectId)}/databases/(default)/documents/users/${encodeURIComponent(userId)}`
   const url = new URL(`https://firestore.googleapis.com/v1/${path}`)
   url.searchParams.set('mask.fieldPaths', 'scanCompleteSentAt')
@@ -107,6 +124,7 @@ export async function userHasScanCompleteSentAt({ projectId, userId, accessToken
   let lastErr
   for (let attempt = 0; attempt < TRANSIENT_MAX_ATTEMPTS; attempt++) {
     try {
+      const accessToken = await getAccessToken()
       const resp = await fetch(url.toString(), {
         method: 'GET',
         headers: { Authorization: `Bearer ${accessToken}` },

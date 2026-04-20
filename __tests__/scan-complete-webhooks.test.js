@@ -123,7 +123,7 @@ describe('userHasScanCompleteSentAt', () => {
     const hasSentAt = await userHasScanCompleteSentAt({
       projectId: 'creatorland-prod',
       userId: 'user-1',
-      accessToken: 'token',
+      getAccessToken: async () => 'token',
     })
 
     expect(hasSentAt).toBe(true)

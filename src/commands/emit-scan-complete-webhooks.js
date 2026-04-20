@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { authenticate, executeSql } from '../lib/db.js'
 import { scanCompleteEligibility } from '../lib/sql/index.js'
 import {
-  getGoogleDatastoreAccessToken,
+  makeGoogleDatastoreTokenProvider,
   userHasScanCompleteSentAt,
   rowToScanCompleteWebhookBody,
   getRowUserId,
@@ -112,9 +112,9 @@ export async function runEmitScanCompleteWebhooks() {
   const rows = Array.isArray(result) ? result : []
   console.log(`[emit-scan-complete-webhooks] cid=${cid} eligibility rows=${rows.length}`)
 
-  let firestoreToken = ''
+  const getFirestoreAccessToken = makeGoogleDatastoreTokenProvider(credentials)
   if (rows.length > 0) {
-    firestoreToken = await getGoogleDatastoreAccessToken(credentials)
+    await getFirestoreAccessToken()
   }
 
   let scanned = rows.length
@@ -139,7 +139,7 @@ export async function runEmitScanCompleteWebhooks() {
           const alreadySent = await userHasScanCompleteSentAt({
             projectId: firestoreProjectId,
             userId,
-            accessToken: firestoreToken,
+            getAccessToken: getFirestoreAccessToken,
           })
           if (alreadySent) {
             skippedDeduped++
