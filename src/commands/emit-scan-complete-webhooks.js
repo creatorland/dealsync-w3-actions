@@ -1,4 +1,5 @@
 import * as core from '@actions/core'
+import { randomUUID } from 'node:crypto'
 import { authenticate, executeSql } from '../lib/db.js'
 import { scanCompleteEligibility } from '../lib/sql/index.js'
 import {
@@ -50,6 +51,7 @@ export function resolveFirestoreServiceAccountJson() {
  * @see docs/plans/2026-04-16-scan-complete-w3-cron-tech-spec.md
  */
 export async function runEmitScanCompleteWebhooks() {
+  const cid = randomUUID()
   const authUrl = core.getInput('sxt-auth-url')
   const authSecret = core.getInput('sxt-auth-secret')
   const apiUrl = core.getInput('sxt-api-url')
@@ -105,10 +107,10 @@ export async function runEmitScanCompleteWebhooks() {
   const jwt = await authenticate(authUrl, authSecret)
   const exec = (q) => executeSql(apiUrl, jwt, biscuit, q)
 
-  console.log('[emit-scan-complete-webhooks] executing eligibility query')
+  console.log(`[emit-scan-complete-webhooks] cid=${cid} executing eligibility query`)
   const result = await exec(sql)
   const rows = Array.isArray(result) ? result : []
-  console.log(`[emit-scan-complete-webhooks] eligibility rows=${rows.length}`)
+  console.log(`[emit-scan-complete-webhooks] cid=${cid} eligibility rows=${rows.length}`)
 
   let firestoreToken = ''
   if (rows.length > 0) {
@@ -128,7 +130,7 @@ export async function runEmitScanCompleteWebhooks() {
         try {
           userId = getRowUserId(row)
         } catch (err) {
-          core.error(`[emit-scan-complete-webhooks] skip invalid row: ${err.message}`)
+          core.error(`[emit-scan-complete-webhooks] cid=${cid} skip invalid row: ${err.message}`)
           errors++
           return
         }
@@ -141,30 +143,34 @@ export async function runEmitScanCompleteWebhooks() {
           })
           if (alreadySent) {
             skippedDeduped++
-            console.log(`[emit-scan-complete-webhooks] skip dedupe userId=${userId}`)
+            console.log(`[emit-scan-complete-webhooks] cid=${cid} skip dedupe userId=${userId}`)
             return
           }
 
           const body = rowToScanCompleteWebhookBody(row)
-          const res = await postScanCompleteWebhook(backendBaseUrl, sharedSecret, body)
+          const res = await postScanCompleteWebhook(backendBaseUrl, sharedSecret, body, {
+            'x-correlation-id': cid,
+          })
           if (!res.ok) {
             errors++
             core.error(
-              `[emit-scan-complete-webhooks] POST failed userId=${userId} status=${res.status} body=${(res.text || '').slice(0, 500)}`,
+              `[emit-scan-complete-webhooks] cid=${cid} POST failed userId=${userId} status=${res.status} body=${(res.text || '').slice(0, 500)}`,
             )
             return
           }
           posted++
-          console.log(`[emit-scan-complete-webhooks] posted userId=${userId}`)
+          console.log(`[emit-scan-complete-webhooks] cid=${cid} posted userId=${userId}`)
         } catch (err) {
           errors++
-          core.error(`[emit-scan-complete-webhooks] error userId=${userId ?? '?'}: ${err.message}`)
+          core.error(
+            `[emit-scan-complete-webhooks] cid=${cid} error userId=${userId ?? '?'}: ${err.message}`,
+          )
         }
       }),
     )
   }
 
-  const summary = { scanned, skippedDeduped, posted, errors }
-  console.log(`[emit-scan-complete-webhooks] done ${JSON.stringify(summary)}`)
+  const summary = { correlationId: cid, scanned, skippedDeduped, posted, errors }
+  console.log(`[emit-scan-complete-webhooks] cid=${cid} done ${JSON.stringify(summary)}`)
   return summary
 }
