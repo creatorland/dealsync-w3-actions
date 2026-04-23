@@ -129,13 +129,13 @@ export function deriveFallbackMainContact(threadEmails, creatorEmail) {
   if (!threadEmails || threadEmails.length === 0) return null
   const creatorLower = (creatorEmail || '').trim().toLowerCase()
 
-  const sorted = [...threadEmails].sort((a, b) => {
-    const da = new Date(getHeader(a, 'date') || 0).getTime() || 0
-    const db = new Date(getHeader(b, 'date') || 0).getTime() || 0
-    return db - da
-  })
+  const dated = threadEmails.map((email) => ({
+    email,
+    t: new Date(getHeader(email, 'date') || 0).getTime() || 0,
+  }))
+  dated.sort((a, b) => b.t - a.t)
 
-  for (const email of sorted) {
+  for (const { email } of dated) {
     const fromHeader = getHeader(email, 'from')
     if (!fromHeader) continue
     const addr = extractEmailAddress(fromHeader)
