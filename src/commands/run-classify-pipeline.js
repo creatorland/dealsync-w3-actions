@@ -654,39 +654,39 @@ export async function runClassifyPipeline() {
 
         // Pass 2: DB lookup via EMAIL_SENDERS for threads still missing a
         // contact — covers the cached-audit retry path where allEmails is null.
+        // One query per thread so a global LIMIT + ORDER BY RECEIVED_AT DESC cannot
+        // starve quieter threads when another thread dominates the newest rows.
+        // Queries run in parallel; per-thread try/catch keeps one failure from aborting the rest.
         const stillMissing = fallbackCandidates.filter((t) => !isUsableContact(t.main_contact))
         if (stillMissing.length > 0) {
-          // One query per thread so a global LIMIT + ORDER BY RECEIVED_AT DESC cannot
-          // starve quieter threads when another thread dominates the newest rows.
-          const latestByThread = {}
-          for (const thread of stillMissing) {
+          const resolveOne = async (thread) => {
             const tid = thread.thread_id
             try {
               const threadKey = sanitizeId(String(tid))
-              const batchUserId = userByThread[threadKey] ?? userByThread[tid]
+              const batchUserId = userByThread[threadKey]
               if (!batchUserId) {
                 console.error(
                   `[run-classify-pipeline] main_contact DB fallback skipped for thread ${tid}: no USER_ID on claimed batch rows`,
                 )
-                continue
+                return
               }
               const senderRows = await execNoRL(
                 emailSendersSql.selectForThreadUser(coreSchema, threadKey, batchUserId),
               )
               for (const row of senderRows || []) {
-                if (row.THREAD_ID !== tid) continue
                 const addr = (row.SENDER_EMAIL || '').trim().toLowerCase()
                 if (!addr) continue
                 if (creatorLower && addr === creatorLower) continue
                 if (isBlockedSenderAddress(addr)) continue
-                latestByThread[tid] = {
+                const name = (row.SENDER_NAME || '').trim()
+                thread.main_contact = {
                   email: addr,
-                  name: row.SENDER_NAME || null,
+                  name: name || null,
                   company: null,
                   title: null,
                   phone_number: null,
                 }
-                break
+                return
               }
             } catch (err) {
               console.error(
@@ -694,10 +694,7 @@ export async function runClassifyPipeline() {
               )
             }
           }
-          for (const thread of stillMissing) {
-            const derived = latestByThread[thread.thread_id]
-            if (derived) thread.main_contact = derived
-          }
+          await Promise.all(stillMissing.map(resolveOne))
         }
 
         const recovered = fallbackCandidates.filter((t) => isUsableContact(t.main_contact)).length
