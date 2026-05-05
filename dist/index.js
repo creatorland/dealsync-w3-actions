@@ -40858,12 +40858,14 @@ async function postFallbackReattempt(
     signal: AbortSignal.timeout(30_000),
   });
   if (resp.status === 409) {
+    await resp.body?.cancel().catch(() => {});
     return { ok: true, status: 409 }
   }
   if (!resp.ok) {
     const text = await resp.text().catch(() => '<unreadable>');
     return { ok: false, status: resp.status, text }
   }
+  await resp.body?.cancel().catch(() => {});
   return { ok: true, status: resp.status }
 }
 
