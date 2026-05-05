@@ -40340,6 +40340,23 @@ async function runRecoveryPipeline() {
 }
 
 /**
+ * Shared parsing helpers for GitHub Action inputs.
+ */
+
+/**
+ * @param {string} raw
+ * @param {string} inputName
+ * @returns {number}
+ */
+function parsePositiveIntegerInput(raw, inputName) {
+  const normalized = String(raw ?? '').trim();
+  if (!/^[1-9][0-9]*$/.test(normalized)) {
+    throw new Error(`${inputName} must be a positive integer`)
+  }
+  return Number(normalized)
+}
+
+/**
  * scan_complete cron helpers: Firestore dedupe (read-only), backend webhook POST, SxT row → DTO.
  * @see backend/src/dtos/dealsync-v2.webhooks.dto.ts
  */
@@ -40627,19 +40644,6 @@ async function postScanCompleteWebhook(baseUrl, sharedSecret, body, headers = {}
 
 /**
  * @param {string} raw
- * @param {string} inputName
- * @returns {number}
- */
-function parsePositiveIntegerInput$1(raw, inputName) {
-  const normalized = String(raw ?? '').trim();
-  if (!/^[1-9][0-9]*$/.test(normalized)) {
-    throw new Error(`${inputName} must be a positive integer`)
-  }
-  return Number(normalized)
-}
-
-/**
- * @param {string} raw
  * @returns {string}
  */
 function normalizeOptionalProjectId(raw) {
@@ -40680,11 +40684,11 @@ async function runEmitScanCompleteWebhooks() {
   if (saJsonRaw) {
     coreExports.setSecret(saJsonRaw);
   }
-  const concurrency = parsePositiveIntegerInput$1(
+  const concurrency = parsePositiveIntegerInput(
     coreExports.getInput('scan-complete-webhook-concurrency') || '5',
     'scan-complete-webhook-concurrency',
   );
-  const batchSize = parsePositiveIntegerInput$1(
+  const batchSize = parsePositiveIntegerInput(
     coreExports.getInput('scan-complete-batch-size') || '500',
     'scan-complete-batch-size',
   );
@@ -40800,19 +40804,6 @@ async function runEmitScanCompleteWebhooks() {
  */
 
 const UEI_LOOKBACK_DAYS_FALLBACK = 45;
-
-/**
- * @param {string} raw
- * @param {string} inputName
- * @returns {number}
- */
-function parsePositiveIntegerInput(raw, inputName) {
-  const normalized = String(raw ?? '').trim();
-  if (!/^[1-9][0-9]*$/.test(normalized)) {
-    throw new Error(`${inputName} must be a positive integer`)
-  }
-  return Number(normalized)
-}
 
 /**
  * @param {string} backendBaseUrl
