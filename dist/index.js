@@ -40815,7 +40815,8 @@ function normalizeBaseUrl(backendBaseUrl) {
 
 /**
  * POST one row to backend's ingestion-trigger route with the §A1 fallback
- * re-attempt override params. Returns `{ ok, status, body }`. Treats 409
+ * re-attempt override params. Returns `{ ok, status, text? }` (where `text`
+ * is the raw response body on non-2xx, non-409 responses). Treats 409
  * (already-in-progress) as success — backend has decided the row already has
  * a successor in flight, which is what we wanted to ensure anyway.
  *
